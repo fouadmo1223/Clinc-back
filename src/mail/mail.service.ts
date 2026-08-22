@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { esc } from '../pdf/templates';
 
 /**
  * Thin abstraction over the email transport. Swap the transporter (or the
@@ -74,6 +75,20 @@ export class MailService {
         <h2>Appointment confirmed</h2>
         <p>Hi ${params.patientName},</p>
         <p>Your appointment with Dr. ${params.doctorName} is confirmed for ${params.date} at ${params.time}.</p>
+      </div>`,
+    );
+  }
+
+  /** Mirrors an in-app notification (appointment booked/cancelled/reminder) out to email. */
+  async sendNotificationEmail(to: string, title: string, message: string, link?: string) {
+    const appUrl = this.config.get<string>('appUrl');
+    await this.send(
+      to,
+      title,
+      `<div style="font-family:sans-serif;max-width:480px;margin:auto">
+        <h2>${esc(title)}</h2>
+        <p>${esc(message)}</p>
+        ${link ? `<p><a href="${appUrl}${esc(link)}" style="background:#0f172a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open in Clinic OS</a></p>` : ''}
       </div>`,
     );
   }

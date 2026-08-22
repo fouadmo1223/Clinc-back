@@ -56,6 +56,7 @@ export class AppointmentRemindersCron {
           title: 'Upcoming appointment',
           message: `${patient?.fullName ?? 'A patient'} at ${formatTime(parseTime(appointment.startTime))} (in under an hour)`,
           link: '/appointments',
+          email: doctor.email,
         });
       }
 

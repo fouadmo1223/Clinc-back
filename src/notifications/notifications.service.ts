@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { Notification, NotificationDocument, NotificationType } from './schemas/notification.schema';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
+import { MailService } from '../mail/mail.service';
 
 export interface CreateNotificationInput {
   clinicId: string;
@@ -11,13 +12,18 @@ export interface CreateNotificationInput {
   title: string;
   message: string;
   link?: string;
+  /** When set, also emails this address the same title/message — used for notifications urgent enough to warrant email (bookings, cancellations, reminders), not noisy real-time ones (queue check-ins). */
+  email?: string;
 }
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger('Notifications');
 
-  constructor(@InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>) {}
+  constructor(
+    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    private mailService: MailService,
+  ) {}
 
   /** Called from other services as a side effect of their own action — a failure here must never break that action. */
   async create(input: CreateNotificationInput): Promise<void> {
@@ -32,6 +38,12 @@ export class NotificationsService {
       });
     } catch (err) {
       this.logger.warn(`Failed to create notification: ${(err as Error).message}`);
+    }
+
+    if (input.email) {
+      await this.mailService
+        .sendNotificationEmail(input.email, input.title, input.message, input.link)
+        .catch((err) => this.logger.warn(`Failed to email notification: ${(err as Error).message}`));
     }
   }
 

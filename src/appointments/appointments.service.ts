@@ -46,6 +46,7 @@ export class AppointmentsService {
       title,
       message,
       link: '/appointments',
+      email: doctor.email,
     });
   }
 

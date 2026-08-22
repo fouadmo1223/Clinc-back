@@ -5,7 +5,7 @@
  * `<img src=x onerror=...>`) could inject markup/script into the rendered
  * page rather than just being displayed as text.
  */
-function esc(value: unknown): string {
+export function esc(value: unknown): string {
   if (value === undefined || value === null) return '';
   return String(value)
     .replace(/&/g, '&amp;')
