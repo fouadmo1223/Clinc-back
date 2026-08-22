@@ -27,6 +27,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { QueueModule } from './queue/queue.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { ReportsModule } from './reports/reports.module';
+import { PdfModule } from './pdf/pdf.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { ReportsModule } from './reports/reports.module';
     QueueModule,
     ExpensesModule,
     ReportsModule,
+    PdfModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

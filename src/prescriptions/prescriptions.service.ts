@@ -8,6 +8,18 @@ import { CreatePrescriptionDto } from './dto/create-prescription.dto';
 import { QueryPrescriptionsDto } from './dto/query-prescriptions.dto';
 import { DoctorsService } from '../doctors/doctors.service';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { PdfService } from '../pdf/pdf.service';
+import { buildPrescriptionHtml } from '../pdf/templates';
+import { ExportService, ExportColumn } from '../pdf/export.service';
+import { ClinicsService } from '../clinics/clinics.service';
+
+const PRESCRIPTION_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'name', label: 'الدواء' },
+  { key: 'dosage', label: 'الجرعة' },
+  { key: 'frequency', label: 'التكرار' },
+  { key: 'durationDays', label: 'المدة (أيام)' },
+  { key: 'instructions', label: 'التعليمات' },
+];
 
 @Injectable()
 export class PrescriptionsService {
@@ -16,6 +28,9 @@ export class PrescriptionsService {
     @InjectModel(Visit.name) private visitModel: Model<VisitDocument>,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     private doctorsService: DoctorsService,
+    private pdfService: PdfService,
+    private exportService: ExportService,
+    private clinicsService: ClinicsService,
   ) {}
 
   async create(clinicId: string, user: AuthenticatedUser, dto: CreatePrescriptionDto) {
@@ -49,6 +64,41 @@ export class PrescriptionsService {
     if (!prescription) throw new NotFoundException('Prescription not found');
     if (prescription.clinicId.toString() !== clinicId) throw new ForbiddenException('Cross-clinic access denied');
     return this.enrich([prescription]).then((r) => r[0]);
+  }
+
+  async generatePdf(clinicId: string, id: string): Promise<Buffer> {
+    const prescription = await this.findOne(clinicId, id);
+    const clinic = await this.clinicsService.findById(clinicId);
+
+    const html = buildPrescriptionHtml(
+      {
+        name: clinic.name,
+        nameAr: clinic.nameAr,
+        address: clinic.address,
+        city: clinic.city,
+        contactPhone: clinic.contactPhone,
+        contactEmail: clinic.contactEmail,
+      },
+      {
+        date: new Date(prescription.createdAt).toLocaleDateString('en-GB'),
+        patientName: prescription.patientName,
+        doctorName: prescription.doctorName,
+        medications: prescription.medications,
+        notes: prescription.notes,
+      },
+    );
+
+    return this.pdfService.renderHtmlToPdf(html);
+  }
+
+  async generateCsv(clinicId: string, id: string): Promise<Buffer> {
+    const prescription = await this.findOne(clinicId, id);
+    return this.exportService.buildCsv(PRESCRIPTION_EXPORT_COLUMNS, prescription.medications);
+  }
+
+  async generateXlsx(clinicId: string, id: string): Promise<Buffer> {
+    const prescription = await this.findOne(clinicId, id);
+    return this.exportService.buildXlsx('Prescription', PRESCRIPTION_EXPORT_COLUMNS, prescription.medications);
   }
 
   private async enrich(prescriptions: PrescriptionDocument[]) {

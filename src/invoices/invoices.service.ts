@@ -6,12 +6,26 @@ import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { PdfService } from '../pdf/pdf.service';
+import { buildInvoiceHtml } from '../pdf/templates';
+import { ExportService, ExportColumn } from '../pdf/export.service';
+import { ClinicsService } from '../clinics/clinics.service';
+
+const INVOICE_EXPORT_COLUMNS: ExportColumn[] = [
+  { key: 'description', label: 'الوصف' },
+  { key: 'quantity', label: 'الكمية' },
+  { key: 'unitPrice', label: 'سعر الوحدة' },
+  { key: 'total', label: 'الإجمالي' },
+];
 
 @Injectable()
 export class InvoicesService {
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
+    private pdfService: PdfService,
+    private exportService: ExportService,
+    private clinicsService: ClinicsService,
   ) {}
 
   async findRaw(clinicId: string, id: string): Promise<InvoiceDocument> {
@@ -81,6 +95,69 @@ export class InvoicesService {
   async findOne(clinicId: string, id: string) {
     const invoice = await this.findRaw(clinicId, id);
     return this.enrich([invoice]).then((r) => r[0]);
+  }
+
+  async generatePdf(clinicId: string, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, id);
+    const clinic = await this.clinicsService.findById(clinicId);
+
+    const html = buildInvoiceHtml(
+      {
+        name: clinic.name,
+        nameAr: clinic.nameAr,
+        address: clinic.address,
+        city: clinic.city,
+        contactPhone: clinic.contactPhone,
+        contactEmail: clinic.contactEmail,
+      },
+      {
+        invoiceNumber: invoice._id.toString().slice(-8).toUpperCase(),
+        date: new Date(invoice.createdAt).toLocaleDateString('en-GB'),
+        patientName: invoice.patientName,
+        patientPhone: invoice.patientPhone,
+        items: invoice.items,
+        subtotal: invoice.subtotal,
+        discount: invoice.discount,
+        total: invoice.total,
+        amountPaid: invoice.amountPaid,
+        status: invoice.status,
+        notes: invoice.notes,
+      },
+    );
+
+    return this.pdfService.renderHtmlToPdf(html);
+  }
+
+  /** Line items plus a totals summary, shared by the CSV and Excel exports. */
+  private buildExportRows(invoice: {
+    items: { description: string; quantity: number; unitPrice: number; total: number }[];
+    subtotal: number;
+    discount: number;
+    total: number;
+    amountPaid: number;
+  }): Record<string, unknown>[] {
+    const rows: Record<string, unknown>[] = invoice.items.map((item) => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    }));
+    rows.push({ description: 'الإجمالي الفرعي', quantity: '', unitPrice: '', total: invoice.subtotal });
+    if (invoice.discount > 0) rows.push({ description: 'الخصم', quantity: '', unitPrice: '', total: -invoice.discount });
+    rows.push({ description: 'الإجمالي', quantity: '', unitPrice: '', total: invoice.total });
+    rows.push({ description: 'المبلغ المدفوع', quantity: '', unitPrice: '', total: invoice.amountPaid });
+    rows.push({ description: 'المبلغ المستحق', quantity: '', unitPrice: '', total: invoice.total - invoice.amountPaid });
+    return rows;
+  }
+
+  async generateCsv(clinicId: string, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, id);
+    return this.exportService.buildCsv(INVOICE_EXPORT_COLUMNS, this.buildExportRows(invoice));
+  }
+
+  async generateXlsx(clinicId: string, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, id);
+    return this.exportService.buildXlsx('Invoice', INVOICE_EXPORT_COLUMNS, this.buildExportRows(invoice));
   }
 
   /** Applies a signed payment/refund delta and recomputes status. Called by PaymentsService. */

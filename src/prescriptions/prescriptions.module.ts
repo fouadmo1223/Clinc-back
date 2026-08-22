@@ -6,6 +6,7 @@ import { PrescriptionsController } from './prescriptions.controller';
 import { VisitsModule } from '../visits/visits.module';
 import { PatientsModule } from '../patients/patients.module';
 import { DoctorsModule } from '../doctors/doctors.module';
+import { ClinicsModule } from '../clinics/clinics.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { DoctorsModule } from '../doctors/doctors.module';
     VisitsModule,
     PatientsModule,
     DoctorsModule,
+    ClinicsModule,
   ],
   providers: [PrescriptionsService],
   controllers: [PrescriptionsController],
