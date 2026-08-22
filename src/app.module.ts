@@ -21,6 +21,8 @@ import { AvailabilityModule } from './availability/availability.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { VisitsModule } from './visits/visits.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { PrescriptionsModule } from './prescriptions/prescriptions.module';
     AppointmentsModule,
     VisitsModule,
     PrescriptionsModule,
+    InvoicesModule,
+    PaymentsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
