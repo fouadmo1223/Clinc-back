@@ -3,11 +3,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { QueueEntry, QueueEntryDocument, QueueStatus } from './schemas/queue-entry.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
-import { Appointment, AppointmentDocument } from '../appointments/schemas/appointment.schema';
+import { Appointment, AppointmentDocument, AppointmentStatus } from '../appointments/schemas/appointment.schema';
 import { CheckInDto } from './dto/check-in.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 import { QueryQueueDto } from './dto/query-queue.dto';
 import { DoctorsService } from '../doctors/doctors.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 
 function startOfUtcDay(date: Date = new Date()): Date {
@@ -21,6 +22,7 @@ export class QueueService {
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private doctorsService: DoctorsService,
+    private appointmentsService: AppointmentsService,
   ) {}
 
   async checkIn(clinicId: string, user: AuthenticatedUser, dto: CheckInDto) {
@@ -62,6 +64,14 @@ export class QueueService {
       createdBy: new Types.ObjectId(user.userId),
     });
 
+    // Checking in means the patient physically showed up — reflect that on the
+    // linked appointment so it doesn't just sit at SCHEDULED all day.
+    if (appointment && appointment.status === AppointmentStatus.SCHEDULED) {
+      await this.appointmentsService
+        .update(clinicId, appointment.id, { status: AppointmentStatus.CONFIRMED })
+        .catch(() => undefined);
+    }
+
     return this.enrich([entry]).then((r) => r[0]);
   }
 
@@ -92,6 +102,14 @@ export class QueueService {
     if (dto.status === QueueStatus.IN_PROGRESS && !entry.calledAt) entry.calledAt = new Date();
     if (dto.status === QueueStatus.DONE && !entry.completedAt) entry.completedAt = new Date();
     await entry.save();
+
+    // Finishing the queue entry means the visit is done — reflect that on the
+    // linked appointment (reuses the same update path visits use for this).
+    if (dto.status === QueueStatus.DONE && entry.appointmentId) {
+      await this.appointmentsService
+        .update(clinicId, entry.appointmentId.toString(), { status: AppointmentStatus.COMPLETED })
+        .catch(() => undefined);
+    }
 
     return this.enrich([entry]).then((r) => r[0]);
   }
