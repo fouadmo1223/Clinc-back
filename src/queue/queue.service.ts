@@ -123,7 +123,7 @@ export class QueueService {
 
     const [patients, doctors, appointments] = await Promise.all([
       this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, phone: 1 }),
-      Promise.all(doctorIds.map((id) => this.doctorsService.findOne(clinicId, id).catch(() => null))),
+      this.doctorsService.findByIds(clinicId, doctorIds),
       this.appointmentModel.find({ _id: { $in: appointmentIds } }, { startTime: 1 }),
     ]);
 

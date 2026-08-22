@@ -24,7 +24,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const message =
       typeof body === 'string'
         ? body
-        : (body as any)?.message ?? (exception as any)?.message ?? 'Internal server error';
+        : isHttp
+          ? ((body as any)?.message ?? 'Internal server error')
+          : 'Internal server error';
 
     if (status >= 500) {
       this.logger.error(`${request.method} ${request.url} -> ${status}`, (exception as Error)?.stack);

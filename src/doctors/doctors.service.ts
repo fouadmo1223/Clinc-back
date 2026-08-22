@@ -35,6 +35,11 @@ export class DoctorsService {
     return doctor;
   }
 
+  async findByIds(clinicId: string, ids: string[]): Promise<DoctorDocument[]> {
+    if (ids.length === 0) return [];
+    return this.doctorModel.find({ _id: { $in: ids }, clinicId });
+  }
+
   async findAll(clinicId: string, includeInactive = false): Promise<DoctorDocument[]> {
     const filter: Record<string, unknown> = { clinicId };
     if (!includeInactive) filter.isActive = true;

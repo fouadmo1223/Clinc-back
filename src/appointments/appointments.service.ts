@@ -209,7 +209,7 @@ export class AppointmentsService {
 
     const [patients, doctors] = await Promise.all([
       this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, phone: 1 }),
-      Promise.all(doctorIds.map((id) => this.doctorsService.findOne(clinicId, id).catch(() => null))),
+      this.doctorsService.findByIds(clinicId, doctorIds),
     ]);
 
     const patientMap = new Map(patients.map((p) => [p.id, p]));

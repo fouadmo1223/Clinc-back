@@ -28,7 +28,10 @@ export class ExpensesService {
     if (query.from || query.to) {
       const range: Record<string, Date> = {};
       if (query.from) range.$gte = new Date(query.from);
-      if (query.to) range.$lte = new Date(query.to);
+      // A date-only `to` parses as that day's UTC midnight — comparing the
+      // full `date` timestamp against it would exclude everything from
+      // later that same day, so widen the upper bound to end-of-day.
+      if (query.to) range.$lte = new Date(new Date(query.to).getTime() + 24 * 60 * 60 * 1000 - 1);
       filter.date = range;
     }
     return this.expenseModel.find(filter).sort({ date: -1 });

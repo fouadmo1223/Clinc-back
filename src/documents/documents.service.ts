@@ -4,7 +4,7 @@ import { FilterQuery, Model, Types } from 'mongoose';
 import { ClinicDocument, ClinicDocumentDocument, DocumentCategory } from './schemas/document.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { CloudinaryService } from './cloudinary.service';
-import { UploadDocumentDto } from './dto/upload-document.dto';
+import { UploadDocumentDto, ALLOWED_DOCUMENT_MIME_TYPES } from './dto/upload-document.dto';
 import { QueryDocumentsDto } from './dto/query-documents.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 
@@ -21,6 +21,9 @@ export class DocumentsService {
   async upload(clinicId: string, user: AuthenticatedUser, dto: UploadDocumentDto, file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('A file is required');
     if (file.size > MAX_FILE_SIZE_BYTES) throw new BadRequestException('File exceeds the 15MB limit');
+    if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException('Unsupported file type. Allowed: PDF, JPEG, PNG, WEBP, DOC, DOCX');
+    }
 
     const patient = await this.patientModel.findById(dto.patientId);
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');

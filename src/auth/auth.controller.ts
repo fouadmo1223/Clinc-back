@@ -1,5 +1,7 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { RegisterClinicDto } from './dto/register-clinic.dto';
 import { LoginDto } from './dto/login.dto';
@@ -9,34 +11,68 @@ import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { parseDurationMs } from '../common/utils/parse-duration';
+
+const REFRESH_COOKIE_NAME = 'refreshToken';
+const REFRESH_COOKIE_PATH = '/api/auth';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private config: ConfigService,
+  ) {}
+
+  /** Sends the refresh token only as an httpOnly cookie — never in the JSON body — so it isn't readable by JS/XSS. */
+  private setRefreshCookie(res: Response, refreshToken: string) {
+    const maxAge = parseDurationMs(this.config.get<string>('jwt.refreshExpiresIn') ?? '30d', 30 * 86_400_000);
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: this.config.get<string>('nodeEnv') === 'production',
+      sameSite: 'lax',
+      path: REFRESH_COOKIE_PATH,
+      maxAge,
+    });
+  }
+
+  private clearRefreshCookie(res: Response) {
+    res.clearCookie(REFRESH_COOKIE_NAME, { path: REFRESH_COOKIE_PATH });
+  }
 
   @Public()
   @Post('register-clinic')
-  registerClinic(@Body() dto: RegisterClinicDto) {
-    return this.authService.registerClinic(dto);
+  async registerClinic(@Body() dto: RegisterClinicDto, @Res({ passthrough: true }) res: Response) {
+    const { refreshToken, ...rest } = await this.authService.registerClinic(dto);
+    this.setRefreshCookie(res, refreshToken);
+    return rest;
   }
 
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const { refreshToken, ...rest } = await this.authService.login(dto);
+    this.setRefreshCookie(res, refreshToken);
+    return rest;
   }
 
   @Public()
   @UseGuards(JwtRefreshGuard)
   @Post('refresh')
-  refresh(@Req() req: Request & { user: { userId: string; refreshToken: string } }) {
-    return this.authService.refresh(req.user.userId, req.user.refreshToken);
+  async refresh(
+    @Req() req: Request & { user: { userId: string; refreshToken: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { refreshToken, ...rest } = await this.authService.refresh(req.user.userId, req.user.refreshToken);
+    this.setRefreshCookie(res, refreshToken);
+    return rest;
   }
 
   @Post('logout')
-  logout(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.logout(user.userId);
+  async logout(@CurrentUser() user: AuthenticatedUser, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logout(user.userId);
+    this.clearRefreshCookie(res);
+    return { success: true };
   }
 
   @Get('me')

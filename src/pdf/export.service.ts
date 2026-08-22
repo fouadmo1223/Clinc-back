@@ -10,7 +10,11 @@ export interface ExportColumn {
 export class ExportService {
   buildCsv(columns: ExportColumn[], rows: Record<string, unknown>[]): Buffer {
     const escape = (value: unknown): string => {
-      const s = value === undefined || value === null ? '' : String(value);
+      let s = value === undefined || value === null ? '' : String(value);
+      // Prefix a leading =, +, -, @, tab, or CR with an apostrophe so
+      // spreadsheet apps treat it as text instead of a formula (CSV/DDE
+      // formula injection).
+      if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [columns.map((c) => escape(c.label)).join(',')];
