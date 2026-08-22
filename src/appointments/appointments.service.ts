@@ -9,6 +9,8 @@ import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { DoctorsService } from '../doctors/doctors.service';
 import { SchedulesService } from '../schedules/schedules.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { parseTime, formatTime, rangesOverlap, TimeRange } from '../common/utils/time.util';
 
@@ -24,7 +26,28 @@ export class AppointmentsService {
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     private doctorsService: DoctorsService,
     private schedulesService: SchedulesService,
+    private notificationsService: NotificationsService,
   ) {}
+
+  /** Notifies the doctor's own login (if they have one) — appointments created for a doctor without a user account are silently skipped. */
+  private async notifyDoctor(
+    clinicId: string,
+    doctorId: string,
+    type: NotificationType,
+    title: string,
+    message: string,
+  ): Promise<void> {
+    const doctor = await this.doctorsService.findOne(clinicId, doctorId).catch(() => null);
+    if (!doctor?.userId) return;
+    await this.notificationsService.create({
+      clinicId,
+      userId: doctor.userId.toString(),
+      type,
+      title,
+      message,
+      link: '/appointments',
+    });
+  }
 
   private async findRaw(clinicId: string, id: string): Promise<AppointmentDocument> {
     const appointment = await this.appointmentModel.findById(id);
@@ -116,6 +139,14 @@ export class AppointmentsService {
       createdBy: new Types.ObjectId(user.userId),
     });
 
+    await this.notifyDoctor(
+      clinicId,
+      dto.doctorId,
+      NotificationType.APPOINTMENT_BOOKED,
+      'New appointment booked',
+      `${patient.fullName} booked ${visitType === VisitType.FOLLOW_UP ? 'a follow-up' : 'a consultation'} on ${dto.date} at ${dto.startTime}`,
+    );
+
     return this.enrich([appointment]).then((r) => r[0]);
   }
 
@@ -197,6 +228,16 @@ export class AppointmentsService {
     appointment.cancelledBy = new Types.ObjectId(user.userId);
     appointment.cancelledAt = new Date();
     await appointment.save();
+
+    const patient = await this.patientModel.findById(appointment.patientId, { fullName: 1 });
+    await this.notifyDoctor(
+      clinicId,
+      appointment.doctorId.toString(),
+      NotificationType.APPOINTMENT_CANCELLED,
+      'Appointment cancelled',
+      `${patient?.fullName ?? 'A patient'}'s appointment on ${appointment.date.toISOString().slice(0, 10)} at ${appointment.startTime} was cancelled${dto.reason ? `: ${dto.reason}` : ''}`,
+    );
+
     return this.enrich([appointment]).then((r) => r[0]);
   }
 

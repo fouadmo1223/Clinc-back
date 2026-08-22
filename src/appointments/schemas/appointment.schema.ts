@@ -69,6 +69,10 @@ export class Appointment {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
+
+  /** Set once the "starting soon" reminder notification has been sent, so the cron job never double-sends it. */
+  @Prop({ default: false })
+  reminderSent: boolean;
 }
 
 export const AppointmentSchema = SchemaFactory.createForClass(Appointment);

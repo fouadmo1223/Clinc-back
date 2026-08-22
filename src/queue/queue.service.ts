@@ -9,6 +9,8 @@ import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 import { QueryQueueDto } from './dto/query-queue.dto';
 import { DoctorsService } from '../doctors/doctors.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/schemas/notification.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 
 function startOfUtcDay(date: Date = new Date()): Date {
@@ -23,6 +25,7 @@ export class QueueService {
     @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private doctorsService: DoctorsService,
     private appointmentsService: AppointmentsService,
+    private notificationsService: NotificationsService,
   ) {}
 
   async checkIn(clinicId: string, user: AuthenticatedUser, dto: CheckInDto) {
@@ -70,6 +73,20 @@ export class QueueService {
       await this.appointmentsService
         .update(clinicId, appointment.id, { status: AppointmentStatus.CONFIRMED })
         .catch(() => undefined);
+    }
+
+    if (entry.doctorId) {
+      const doctor = await this.doctorsService.findOne(clinicId, entry.doctorId.toString()).catch(() => null);
+      if (doctor?.userId) {
+        await this.notificationsService.create({
+          clinicId,
+          userId: doctor.userId.toString(),
+          type: NotificationType.QUEUE_CHECK_IN,
+          title: 'Patient checked in',
+          message: `${patient.fullName} is waiting in the queue`,
+          link: '/queue',
+        });
+      }
     }
 
     return this.enrich([entry]).then((r) => r[0]);
