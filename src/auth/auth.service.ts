@@ -67,7 +67,7 @@ export class AuthService {
       name: dto.clinicName,
       nameAr: dto.clinicNameAr,
       contactEmail: dto.email,
-      contactPhone: dto.clinicPhone,
+      contactPhones: [dto.clinicPhone],
     });
 
     const passwordHash = await argon2.hash(dto.password);

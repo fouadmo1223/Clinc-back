@@ -40,8 +40,8 @@ export class Clinic {
   @Prop({ required: true })
   contactEmail: string;
 
-  @Prop({ required: true })
-  contactPhone: string;
+  @Prop({ type: [String], required: true })
+  contactPhones: string[];
 
   @Prop()
   address?: string;

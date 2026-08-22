@@ -76,7 +76,7 @@ export class PrescriptionsService {
         nameAr: clinic.nameAr,
         address: clinic.address,
         city: clinic.city,
-        contactPhone: clinic.contactPhone,
+        contactPhones: clinic.contactPhones,
         contactEmail: clinic.contactEmail,
       },
       {

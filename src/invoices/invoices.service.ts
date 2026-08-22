@@ -107,7 +107,7 @@ export class InvoicesService {
         nameAr: clinic.nameAr,
         address: clinic.address,
         city: clinic.city,
-        contactPhone: clinic.contactPhone,
+        contactPhones: clinic.contactPhones,
         contactEmail: clinic.contactEmail,
       },
       {

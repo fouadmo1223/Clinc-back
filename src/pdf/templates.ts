@@ -20,7 +20,7 @@ interface ClinicInfo {
   nameAr: string;
   address?: string;
   city?: string;
-  contactPhone: string;
+  contactPhones: string[];
   contactEmail: string;
 }
 
@@ -74,7 +74,7 @@ function header(clinic: ClinicInfo, title: string, metaLines: string[]): string 
         <div class="clinic-name">${esc(clinic.nameAr || clinic.name)}</div>
         <div class="clinic-meta">
           ${esc([clinic.address, clinic.city].filter(Boolean).join('، '))}<br/>
-          ${esc(clinic.contactPhone)}${clinic.contactEmail ? ' · ' + esc(clinic.contactEmail) : ''}
+          ${esc(clinic.contactPhones.join(' / '))}${clinic.contactEmail ? ' · ' + esc(clinic.contactEmail) : ''}
         </div>
       </div>
       <div>

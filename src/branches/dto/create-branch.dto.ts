@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { WorkingHoursDto } from './working-hours.dto';
 
 export class CreateBranchDto {
@@ -16,8 +16,10 @@ export class CreateBranchDto {
   @IsString()
   city?: string;
 
-  @IsString()
-  phone: string;
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  phones: string[];
 
   @IsOptional()
   @IsArray()

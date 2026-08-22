@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { WorkingHoursDto } from '../../branches/dto/working-hours.dto';
 
 class AppointmentSettingsDto {
@@ -16,7 +16,13 @@ export class UpdateClinicDto {
   @IsOptional() @IsString() nameAr?: string;
   @IsOptional() @IsString() logoUrl?: string;
   @IsOptional() @IsString() contactEmail?: string;
-  @IsOptional() @IsString() contactPhone?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  contactPhones?: string[];
+
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() city?: string;
 

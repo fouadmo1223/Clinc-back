@@ -29,8 +29,8 @@ export class Branch {
   @Prop()
   city?: string;
 
-  @Prop({ required: true })
-  phone: string;
+  @Prop({ type: [String], required: true })
+  phones: string[];
 
   @Prop({ type: [WorkingHoursSchema], default: [] })
   workingHours: WorkingHours[];
