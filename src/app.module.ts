@@ -23,6 +23,10 @@ import { VisitsModule } from './visits/visits.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { PaymentsModule } from './payments/payments.module';
+import { DocumentsModule } from './documents/documents.module';
+import { QueueModule } from './queue/queue.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -43,6 +47,10 @@ import { PaymentsModule } from './payments/payments.module';
     PrescriptionsModule,
     InvoicesModule,
     PaymentsModule,
+    DocumentsModule,
+    QueueModule,
+    ExpensesModule,
+    ReportsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
