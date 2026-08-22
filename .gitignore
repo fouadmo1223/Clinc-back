@@ -16,3 +16,8 @@ Thumbs.db
 coverage/
 .vscode/
 .idea/
+
+# local seed/fake data scripts - never pushed
+src/seed/
+seed/
+*.seed.ts
