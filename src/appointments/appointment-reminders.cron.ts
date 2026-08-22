@@ -10,6 +10,11 @@ import { NotificationType } from '../notifications/schemas/notification.schema';
 import { formatTime, parseTime } from '../common/utils/time.util';
 
 const REMINDER_WINDOW_MINUTES = 60;
+const REMINDER_WINDOW_MS = REMINDER_WINDOW_MINUTES * 60 * 1000;
+
+function startOfUtcDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
 
 /** Every 15 minutes, notifies doctors about their own appointments starting within the next hour. */
 @Injectable()
@@ -26,44 +31,64 @@ export class AppointmentRemindersCron {
   @Cron('*/15 * * * *')
   async sendUpcomingReminders() {
     const now = new Date();
-    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const today = startOfUtcDay(now);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
+    // Query both today's and tomorrow's UTC-day buckets so an appointment just after
+    // midnight is still found while it's within the reminder window. `reminderSent` is
+    // matched with $ne (not `false`) since appointments created before this field existed
+    // have no value for it at all, and `{reminderSent: false}` would never match "missing".
     const candidates = await this.appointmentModel.find({
-      date: today,
+      date: { $in: [today, tomorrow] },
       status: { $in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
-      reminderSent: false,
+      reminderSent: { $ne: true },
     });
 
+    // Compare absolute instants (date + startTime), not just startTime minutes-of-day,
+    // so appointments due within the window but dated "tomorrow" are handled correctly.
     const due = candidates.filter((a) => {
-      const start = parseTime(a.startTime);
-      return start >= nowMinutes && start - nowMinutes <= REMINDER_WINDOW_MINUTES;
+      const apptInstant = a.date.getTime() + parseTime(a.startTime) * 60_000;
+      const diffMs = apptInstant - now.getTime();
+      return diffMs >= 0 && diffMs <= REMINDER_WINDOW_MS;
     });
     if (due.length === 0) return;
 
+    // Atomically claim each appointment before sending — if a slow previous tick is still
+    // processing when this one starts, findOneAndUpdate only succeeds for one of them,
+    // preventing a duplicate reminder from being sent for the same appointment.
+    const claimed: AppointmentDocument[] = [];
     for (const appointment of due) {
-      const clinicId = appointment.clinicId.toString();
-      const [doctor, patient] = await Promise.all([
-        this.doctorsService.findOne(clinicId, appointment.doctorId.toString()).catch(() => null),
-        this.patientModel.findById(appointment.patientId, { fullName: 1 }),
-      ]);
+      const result = await this.appointmentModel.findOneAndUpdate(
+        { _id: appointment._id, reminderSent: { $ne: true } },
+        { $set: { reminderSent: true } },
+      );
+      if (result) claimed.push(appointment);
+    }
+    if (claimed.length === 0) return;
 
-      if (doctor?.userId) {
-        await this.notificationsService.create({
-          clinicId,
-          userId: doctor.userId.toString(),
+    const clinicId = claimed[0].clinicId.toString();
+    const doctorIds = [...new Set(claimed.map((a) => a.doctorId.toString()))];
+    const patientIds = [...new Set(claimed.map((a) => a.patientId.toString()))];
+    const [doctors, patients] = await Promise.all([
+      this.doctorsService.findByIds(clinicId, doctorIds),
+      this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1 }),
+    ]);
+    const doctorMap = new Map(doctors.map((d) => [d.id, d]));
+    const patientMap = new Map(patients.map((p) => [p.id, p]));
+
+    await Promise.all(
+      claimed.map((appointment) =>
+        this.notificationsService.notifyDoctorIfLinked({
+          clinicId: appointment.clinicId.toString(),
+          doctor: doctorMap.get(appointment.doctorId.toString()),
           type: NotificationType.APPOINTMENT_REMINDER,
           title: 'Upcoming appointment',
-          message: `${patient?.fullName ?? 'A patient'} at ${formatTime(parseTime(appointment.startTime))} (in under an hour)`,
+          message: `${patientMap.get(appointment.patientId.toString())?.fullName ?? 'A patient'} at ${formatTime(parseTime(appointment.startTime))} (in under an hour)`,
           link: '/appointments',
-          email: doctor.email,
-        });
-      }
+        }),
+      ),
+    );
 
-      appointment.reminderSent = true;
-      await appointment.save();
-    }
-
-    this.logger.log(`Sent ${due.length} appointment reminder(s)`);
+    this.logger.log(`Sent ${claimed.length} appointment reminder(s)`);
   }
 }

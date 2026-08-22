@@ -77,16 +77,15 @@ export class QueueService {
 
     if (entry.doctorId) {
       const doctor = await this.doctorsService.findOne(clinicId, entry.doctorId.toString()).catch(() => null);
-      if (doctor?.userId) {
-        await this.notificationsService.create({
-          clinicId,
-          userId: doctor.userId.toString(),
-          type: NotificationType.QUEUE_CHECK_IN,
-          title: 'Patient checked in',
-          message: `${patient.fullName} is waiting in the queue`,
-          link: '/queue',
-        });
-      }
+      await this.notificationsService.notifyDoctorIfLinked({
+        clinicId,
+        doctor,
+        type: NotificationType.QUEUE_CHECK_IN,
+        title: 'Patient checked in',
+        message: `${patient.fullName} is waiting in the queue`,
+        link: '/queue',
+        sendEmail: false,
+      });
     }
 
     return this.enrich([entry]).then((r) => r[0]);

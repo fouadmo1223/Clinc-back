@@ -32,9 +32,11 @@ export class ClinicsController {
   @Post('logo')
   @ApiConsumes('multipart/form-data')
   @RequirePermissions(Permission.SETTINGS_MANAGE)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_LOGO_SIZE_BYTES } }))
   async uploadLogo(@CurrentUser() user: AuthenticatedUser, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('A file is required');
+    // Multer's `limits.fileSize` above already rejects an oversized upload mid-stream
+    // before it's fully buffered; this is a defensive backstop, not the primary guard.
     if (file.size > MAX_LOGO_SIZE_BYTES) throw new BadRequestException('File exceeds the 5MB limit');
     if (!ALLOWED_LOGO_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException('Unsupported file type. Allowed: JPEG, PNG, WEBP, SVG');

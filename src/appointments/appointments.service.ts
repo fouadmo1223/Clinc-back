@@ -38,16 +38,7 @@ export class AppointmentsService {
     message: string,
   ): Promise<void> {
     const doctor = await this.doctorsService.findOne(clinicId, doctorId).catch(() => null);
-    if (!doctor?.userId) return;
-    await this.notificationsService.create({
-      clinicId,
-      userId: doctor.userId.toString(),
-      type,
-      title,
-      message,
-      link: '/appointments',
-      email: doctor.email,
-    });
+    await this.notificationsService.notifyDoctorIfLinked({ clinicId, doctor, type, title, message, link: '/appointments' });
   }
 
   private async findRaw(clinicId: string, id: string): Promise<AppointmentDocument> {

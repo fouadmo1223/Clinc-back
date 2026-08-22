@@ -16,6 +16,11 @@ export interface CreateNotificationInput {
   email?: string;
 }
 
+export interface NotifiableDoctor {
+  userId?: Types.ObjectId;
+  email: string;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger('Notifications');
@@ -45,6 +50,32 @@ export class NotificationsService {
         .sendNotificationEmail(input.email, input.title, input.message, input.link)
         .catch((err) => this.logger.warn(`Failed to email notification: ${(err as Error).message}`));
     }
+  }
+
+  /**
+   * Shared by every caller that notifies "a doctor" about something — doctors without a
+   * linked login are silently skipped. `sendEmail` defaults to true; pass false for noisy
+   * real-time signals (e.g. queue check-ins) that aren't worth an email.
+   */
+  async notifyDoctorIfLinked(params: {
+    clinicId: string;
+    doctor: NotifiableDoctor | null | undefined;
+    type: NotificationType;
+    title: string;
+    message: string;
+    link?: string;
+    sendEmail?: boolean;
+  }): Promise<void> {
+    if (!params.doctor?.userId) return;
+    await this.create({
+      clinicId: params.clinicId,
+      userId: params.doctor.userId.toString(),
+      type: params.type,
+      title: params.title,
+      message: params.message,
+      link: params.link,
+      email: (params.sendEmail ?? true) ? params.doctor.email : undefined,
+    });
   }
 
   async findAll(clinicId: string, userId: string, query: QueryNotificationsDto) {
