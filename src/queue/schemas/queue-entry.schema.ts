@@ -31,8 +31,10 @@ export class QueueEntry {
   @Prop({ required: true, index: true })
   date: Date;
 
-  @Prop({ required: true, min: 1 })
-  queueNumber: number;
+  // Only assigned to walk-ins (no appointmentId) — its own 1, 2, 3... sequence,
+  // separate from booked patients, who are shown by their appointment time instead.
+  @Prop({ min: 1 })
+  queueNumber?: number;
 
   @Prop({ required: true, enum: QueueStatus, default: QueueStatus.WAITING, index: true })
   status: QueueStatus;

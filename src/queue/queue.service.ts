@@ -1,8 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { QueueEntry, QueueEntryDocument, QueueStatus } from './schemas/queue-entry.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import { Appointment, AppointmentDocument } from '../appointments/schemas/appointment.schema';
 import { CheckInDto } from './dto/check-in.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
 import { QueryQueueDto } from './dto/query-queue.dto';
@@ -18,6 +19,7 @@ export class QueueService {
   constructor(
     @InjectModel(QueueEntry.name) private queueModel: Model<QueueEntryDocument>,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
+    @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private doctorsService: DoctorsService,
   ) {}
 
@@ -26,16 +28,32 @@ export class QueueService {
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');
     if (dto.doctorId) await this.doctorsService.findOne(clinicId, dto.doctorId);
 
+    let appointment: AppointmentDocument | null = null;
+    if (dto.appointmentId) {
+      appointment = await this.appointmentModel.findById(dto.appointmentId);
+      if (!appointment || appointment.clinicId.toString() !== clinicId) throw new NotFoundException('Appointment not found');
+      if (appointment.patientId.toString() !== dto.patientId) {
+        throw new BadRequestException('That appointment does not belong to this patient');
+      }
+    }
+
     const date = startOfUtcDay();
-    const last = await this.queueModel.findOne({ clinicId, branchId: dto.branchId, date }).sort({ queueNumber: -1 });
-    const queueNumber = (last?.queueNumber ?? 0) + 1;
+
+    let queueNumber: number | undefined;
+    if (!appointment) {
+      // Walk-ins get their own 1, 2, 3... sequence, separate from booked patients.
+      const last = await this.queueModel
+        .findOne({ clinicId, branchId: dto.branchId, date, queueNumber: { $exists: true, $ne: null } })
+        .sort({ queueNumber: -1 });
+      queueNumber = (last?.queueNumber ?? 0) + 1;
+    }
 
     const entry = await this.queueModel.create({
       clinicId: new Types.ObjectId(clinicId),
       branchId: new Types.ObjectId(dto.branchId),
-      doctorId: dto.doctorId ? new Types.ObjectId(dto.doctorId) : undefined,
+      doctorId: dto.doctorId ? new Types.ObjectId(dto.doctorId) : appointment?.doctorId,
       patientId: new Types.ObjectId(dto.patientId),
-      appointmentId: dto.appointmentId ? new Types.ObjectId(dto.appointmentId) : undefined,
+      appointmentId: appointment?._id,
       date,
       queueNumber,
       status: QueueStatus.WAITING,
@@ -51,8 +69,18 @@ export class QueueService {
     const filter: FilterQuery<QueueEntryDocument> = { clinicId, date: startOfUtcDay(query.date ? new Date(query.date) : new Date()) };
     if (query.branchId) filter.branchId = query.branchId;
 
-    const entries = await this.queueModel.find(filter).sort({ queueNumber: 1 });
-    return this.enrich(entries);
+    const entries = await this.queueModel.find(filter);
+    const enriched = await this.enrich(entries);
+
+    // Booked patients (shown by appointment time) take priority over walk-ins
+    // (shown by check-in order), matching how the front desk actually calls people in.
+    return enriched.sort((a, b) => {
+      const aBooked = !!a.appointmentStartTime;
+      const bBooked = !!b.appointmentStartTime;
+      if (aBooked !== bBooked) return aBooked ? -1 : 1;
+      if (aBooked && bBooked) return a.appointmentStartTime!.localeCompare(b.appointmentStartTime!);
+      return (a.queueNumber ?? 0) - (b.queueNumber ?? 0);
+    });
   }
 
   async updateStatus(clinicId: string, id: string, dto: UpdateQueueEntryDto) {
@@ -73,20 +101,30 @@ export class QueueService {
     const clinicId = entries[0].clinicId.toString();
     const patientIds = [...new Set(entries.map((e) => e.patientId.toString()))];
     const doctorIds = [...new Set(entries.filter((e) => e.doctorId).map((e) => e.doctorId!.toString()))];
+    const appointmentIds = [...new Set(entries.filter((e) => e.appointmentId).map((e) => e.appointmentId!.toString()))];
 
-    const [patients, doctors] = await Promise.all([
+    const [patients, doctors, appointments] = await Promise.all([
       this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, phone: 1 }),
       Promise.all(doctorIds.map((id) => this.doctorsService.findOne(clinicId, id).catch(() => null))),
+      this.appointmentModel.find({ _id: { $in: appointmentIds } }, { startTime: 1 }),
     ]);
 
     const patientMap = new Map(patients.map((p) => [p.id, p]));
     const doctorMap = new Map(doctors.filter((d): d is NonNullable<typeof d> => !!d).map((d) => [d.id, d]));
+    const appointmentMap = new Map(appointments.map((a) => [a.id, a]));
 
     return entries.map((e) => {
       const obj = e.toObject();
       const patient = patientMap.get(e.patientId.toString());
       const doctor = e.doctorId ? doctorMap.get(e.doctorId.toString()) : undefined;
-      return { ...obj, patientName: patient?.fullName, patientPhone: patient?.phone, doctorName: doctor?.fullName };
+      const appointment = e.appointmentId ? appointmentMap.get(e.appointmentId.toString()) : undefined;
+      return {
+        ...obj,
+        patientName: patient?.fullName,
+        patientPhone: patient?.phone,
+        doctorName: doctor?.fullName,
+        appointmentStartTime: appointment?.startTime,
+      };
     });
   }
 }

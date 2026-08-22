@@ -5,9 +5,15 @@ import { QueueService } from './queue.service';
 import { QueueController } from './queue.controller';
 import { PatientsModule } from '../patients/patients.module';
 import { DoctorsModule } from '../doctors/doctors.module';
+import { AppointmentsModule } from '../appointments/appointments.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: QueueEntry.name, schema: QueueEntrySchema }]), PatientsModule, DoctorsModule],
+  imports: [
+    MongooseModule.forFeature([{ name: QueueEntry.name, schema: QueueEntrySchema }]),
+    PatientsModule,
+    DoctorsModule,
+    AppointmentsModule,
+  ],
   providers: [QueueService],
   controllers: [QueueController],
   exports: [QueueService, MongooseModule],
