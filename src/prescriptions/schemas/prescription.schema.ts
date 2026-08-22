@@ -39,4 +39,3 @@ export class Prescription {
 
 export const PrescriptionSchema = SchemaFactory.createForClass(Prescription);
 PrescriptionSchema.index({ patientId: 1, createdAt: -1 });
-PrescriptionSchema.index({ visitId: 1 });
