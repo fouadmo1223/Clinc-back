@@ -14,6 +14,9 @@ export class Patient {
   @Prop({ required: true, index: true })
   phone: string;
 
+  @Prop({ lowercase: true, trim: true })
+  email?: string;
+
   @Prop({ enum: ['MALE', 'FEMALE'] })
   gender?: string;
 

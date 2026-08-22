@@ -11,6 +11,8 @@ import { DoctorsService } from '../doctors/doctors.service';
 import { SchedulesService } from '../schedules/schedules.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
+import { ClinicsService } from '../clinics/clinics.service';
+import { MailService } from '../mail/mail.service';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { parseTime, formatTime, rangesOverlap, TimeRange } from '../common/utils/time.util';
 
@@ -27,6 +29,8 @@ export class AppointmentsService {
     private doctorsService: DoctorsService,
     private schedulesService: SchedulesService,
     private notificationsService: NotificationsService,
+    private clinicsService: ClinicsService,
+    private mailService: MailService,
   ) {}
 
   /** Notifies the doctor's own login (if they have one) — appointments created for a doctor without a user account are silently skipped. */
@@ -39,6 +43,28 @@ export class AppointmentsService {
   ): Promise<void> {
     const doctor = await this.doctorsService.findOne(clinicId, doctorId).catch(() => null);
     await this.notificationsService.notifyDoctorIfLinked({ clinicId, doctor, type, title, message, link: '/appointments' });
+  }
+
+  /** Emails the patient directly, if they have one on file — separate from the in-app doctor notification above. */
+  private async notifyPatient(
+    clinicId: string,
+    patient: { email?: string; fullName: string } | null | undefined,
+    doctorName: string,
+    kind: 'booked' | 'cancelled' | 'reminder',
+    date: string,
+    time: string,
+    reason?: string,
+  ): Promise<void> {
+    if (!patient?.email) return;
+    const clinic = await this.clinicsService.findById(clinicId).catch(() => null);
+    const params = { patientName: patient.fullName, doctorName, clinicName: clinic?.name ?? 'the clinic', date, time };
+    const send =
+      kind === 'booked'
+        ? this.mailService.sendPatientAppointmentBooked(patient.email, params)
+        : kind === 'cancelled'
+          ? this.mailService.sendPatientAppointmentCancelled(patient.email, { ...params, reason })
+          : this.mailService.sendPatientAppointmentReminder(patient.email, params);
+    await send.catch(() => undefined);
   }
 
   private async findRaw(clinicId: string, id: string): Promise<AppointmentDocument> {
@@ -138,6 +164,7 @@ export class AppointmentsService {
       'New appointment booked',
       `${patient.fullName} booked ${visitType === VisitType.FOLLOW_UP ? 'a follow-up' : 'a consultation'} on ${dto.date} at ${dto.startTime}`,
     );
+    await this.notifyPatient(clinicId, patient, doctor.fullName, 'booked', dto.date, dto.startTime);
 
     return this.enrich([appointment]).then((r) => r[0]);
   }
@@ -221,14 +248,19 @@ export class AppointmentsService {
     appointment.cancelledAt = new Date();
     await appointment.save();
 
-    const patient = await this.patientModel.findById(appointment.patientId, { fullName: 1 });
+    const [patient, doctor] = await Promise.all([
+      this.patientModel.findById(appointment.patientId, { fullName: 1, email: 1 }),
+      this.doctorsService.findOne(clinicId, appointment.doctorId.toString()).catch(() => null),
+    ]);
+    const dateStr = appointment.date.toISOString().slice(0, 10);
     await this.notifyDoctor(
       clinicId,
       appointment.doctorId.toString(),
       NotificationType.APPOINTMENT_CANCELLED,
       'Appointment cancelled',
-      `${patient?.fullName ?? 'A patient'}'s appointment on ${appointment.date.toISOString().slice(0, 10)} at ${appointment.startTime} was cancelled${dto.reason ? `: ${dto.reason}` : ''}`,
+      `${patient?.fullName ?? 'A patient'}'s appointment on ${dateStr} at ${appointment.startTime} was cancelled${dto.reason ? `: ${dto.reason}` : ''}`,
     );
+    await this.notifyPatient(clinicId, patient, doctor?.fullName ?? 'your doctor', 'cancelled', dateStr, appointment.startTime, dto.reason);
 
     return this.enrich([appointment]).then((r) => r[0]);
   }

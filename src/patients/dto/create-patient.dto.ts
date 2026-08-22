@@ -1,4 +1,4 @@
-import { IsArray, IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreatePatientDto {
   @IsString()
@@ -8,6 +8,10 @@ export class CreatePatientDto {
   @IsString()
   @MinLength(6)
   phone: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsOptional()
   @IsIn(['MALE', 'FEMALE'])

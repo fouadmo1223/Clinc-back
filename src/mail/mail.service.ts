@@ -40,17 +40,26 @@ export class MailService {
     });
   }
 
+  /** Every template shares this shell — a title, arbitrary body HTML the caller has already escaped, and an optional CTA button. */
+  private wrap(title: string, bodyHtml: string, cta?: { label: string; url: string }): string {
+    return `<div style="font-family:sans-serif;max-width:480px;margin:auto">
+      <h2>${esc(title)}</h2>
+      ${bodyHtml}
+      ${cta ? `<p><a href="${esc(cta.url)}" style="background:#0f172a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">${esc(cta.label)}</a></p>` : ''}
+    </div>`;
+  }
+
   async sendPasswordReset(to: string, fullName: string, resetUrl: string) {
     await this.send(
       to,
       'Reset your password',
-      `<div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2>Password reset</h2>
-        <p>Hi ${fullName},</p>
-        <p>Click the button below to reset your password. This link expires in 30 minutes.</p>
-        <p><a href="${resetUrl}" style="background:#0f172a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Reset password</a></p>
-        <p>If you didn't request this, you can safely ignore this email.</p>
-      </div>`,
+      this.wrap(
+        'Password reset',
+        `<p>Hi ${esc(fullName)},</p>
+         <p>Click the button below to reset your password. This link expires in 30 minutes.</p>
+         <p>If you didn't request this, you can safely ignore this email.</p>`,
+        { label: 'Reset password', url: resetUrl },
+      ),
     );
   }
 
@@ -58,38 +67,69 @@ export class MailService {
     await this.send(
       to,
       "You've been added to your clinic's workspace",
-      `<div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2>Welcome, ${fullName}</h2>
-        <p>An account has been created for you. Click below to set your password and sign in.</p>
-        <p><a href="${setupUrl}" style="background:#0f172a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Set your password</a></p>
-        <p>This link expires in 7 days.</p>
-      </div>`,
+      this.wrap(
+        `Welcome, ${esc(fullName)}`,
+        `<p>An account has been created for you. Click below to set your password and sign in.</p>
+         <p>This link expires in 7 days.</p>`,
+        { label: 'Set your password', url: setupUrl },
+      ),
     );
   }
 
-  async sendAppointmentConfirmation(to: string, params: { patientName: string; doctorName: string; date: string; time: string }) {
-    await this.send(
-      to,
-      'Appointment confirmed',
-      `<div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2>Appointment confirmed</h2>
-        <p>Hi ${params.patientName},</p>
-        <p>Your appointment with Dr. ${params.doctorName} is confirmed for ${params.date} at ${params.time}.</p>
-      </div>`,
-    );
-  }
-
-  /** Mirrors an in-app notification (appointment booked/cancelled/reminder) out to email. */
+  /** Mirrors an in-app staff/doctor notification (appointment booked/cancelled/reminder) out to email. */
   async sendNotificationEmail(to: string, title: string, message: string, link?: string) {
     const appUrl = this.config.get<string>('appUrl');
     await this.send(
       to,
       title,
-      `<div style="font-family:sans-serif;max-width:480px;margin:auto">
-        <h2>${esc(title)}</h2>
-        <p>${esc(message)}</p>
-        ${link ? `<p><a href="${appUrl}${esc(link)}" style="background:#0f172a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Open in Clinic OS</a></p>` : ''}
-      </div>`,
+      this.wrap(title, `<p>${esc(message)}</p>`, link ? { label: 'Open in Clinic OS', url: `${appUrl}${link}` } : undefined),
+    );
+  }
+
+  private async sendPatientAppointmentEmail(
+    to: string,
+    subject: string,
+    title: string,
+    params: { patientName: string; doctorName: string; clinicName: string; date: string; time: string },
+    extraLine?: string,
+  ) {
+    await this.send(
+      to,
+      subject,
+      this.wrap(
+        title,
+        `<p>Hi ${esc(params.patientName)},</p>
+         <p>Your appointment with Dr. ${esc(params.doctorName)} at ${esc(params.clinicName)} is scheduled for
+            ${esc(params.date)} at ${esc(params.time)}.</p>
+         ${extraLine ? `<p>${esc(extraLine)}</p>` : ''}`,
+      ),
+    );
+  }
+
+  async sendPatientAppointmentBooked(
+    to: string,
+    params: { patientName: string; doctorName: string; clinicName: string; date: string; time: string },
+  ) {
+    await this.sendPatientAppointmentEmail(to, 'Appointment confirmed', 'Appointment confirmed', params);
+  }
+
+  async sendPatientAppointmentReminder(
+    to: string,
+    params: { patientName: string; doctorName: string; clinicName: string; date: string; time: string },
+  ) {
+    await this.sendPatientAppointmentEmail(to, 'Upcoming appointment reminder', 'See you soon', params, 'This is a reminder — we look forward to seeing you.');
+  }
+
+  async sendPatientAppointmentCancelled(
+    to: string,
+    params: { patientName: string; doctorName: string; clinicName: string; date: string; time: string; reason?: string },
+  ) {
+    await this.sendPatientAppointmentEmail(
+      to,
+      'Appointment cancelled',
+      'Appointment cancelled',
+      params,
+      params.reason ? `Reason: ${params.reason}` : 'Please contact us if you’d like to rebook.',
     );
   }
 }
