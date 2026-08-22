@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { ClinicDocument, ClinicDocumentDocument, DocumentCategory } from './schemas/document.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
-import { CloudinaryService } from './cloudinary.service';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
 import { UploadDocumentDto, ALLOWED_DOCUMENT_MIME_TYPES } from './dto/upload-document.dto';
 import { QueryDocumentsDto } from './dto/query-documents.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';

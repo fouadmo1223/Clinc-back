@@ -3,12 +3,16 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ClinicDocument, ClinicDocumentSchema } from './schemas/document.schema';
 import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';
-import { CloudinaryService } from './cloudinary.service';
 import { PatientsModule } from '../patients/patients.module';
+import { CloudinaryModule } from '../common/cloudinary/cloudinary.module';
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: ClinicDocument.name, schema: ClinicDocumentSchema }]), PatientsModule],
-  providers: [DocumentsService, CloudinaryService],
+  imports: [
+    MongooseModule.forFeature([{ name: ClinicDocument.name, schema: ClinicDocumentSchema }]),
+    PatientsModule,
+    CloudinaryModule,
+  ],
+  providers: [DocumentsService],
   controllers: [DocumentsController],
   exports: [DocumentsService, MongooseModule],
 })

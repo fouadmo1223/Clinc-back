@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Clinic, ClinicDocument } from './schemas/clinic.schema';
+import { UpdateClinicDto } from './dto/update-clinic.dto';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
 
 function slugify(input: string): string {
   return input
@@ -13,7 +15,10 @@ function slugify(input: string): string {
 
 @Injectable()
 export class ClinicsService {
-  constructor(@InjectModel(Clinic.name) private clinicModel: Model<ClinicDocument>) {}
+  constructor(
+    @InjectModel(Clinic.name) private clinicModel: Model<ClinicDocument>,
+    private cloudinary: CloudinaryService,
+  ) {}
 
   async create(data: Partial<Clinic>): Promise<ClinicDocument> {
     let slug = slugify(data.name ?? 'clinic');
@@ -36,9 +41,17 @@ export class ClinicsService {
     return this.clinicModel.findById(id);
   }
 
-  async update(id: string, data: Partial<Clinic>): Promise<ClinicDocument> {
+  async update(id: string, data: UpdateClinicDto): Promise<ClinicDocument> {
     const clinic = await this.findById(id);
     Object.assign(clinic, data);
+    await clinic.save();
+    return clinic;
+  }
+
+  async updateLogo(id: string, file: Express.Multer.File): Promise<ClinicDocument> {
+    const clinic = await this.findById(id);
+    const result = await this.cloudinary.uploadBuffer(file.buffer, `clinic/${id}/logo`);
+    clinic.logoUrl = result.secure_url;
     await clinic.save();
     return clinic;
   }
