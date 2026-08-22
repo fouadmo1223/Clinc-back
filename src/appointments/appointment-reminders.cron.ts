@@ -7,6 +7,7 @@ import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { DoctorsService } from '../doctors/doctors.service';
 import { ClinicsService } from '../clinics/clinics.service';
 import { MailService } from '../mail/mail.service';
+import { SmsService } from '../common/sms/sms.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { formatTime, parseTime } from '../common/utils/time.util';
@@ -29,6 +30,7 @@ export class AppointmentRemindersCron {
     private doctorsService: DoctorsService,
     private clinicsService: ClinicsService,
     private mailService: MailService,
+    private smsService: SmsService,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -93,7 +95,7 @@ export class AppointmentRemindersCron {
     const [clinic, doctors, patients] = await Promise.all([
       this.clinicsService.findById(clinicId).catch(() => null),
       this.doctorsService.findByIds(clinicId, doctorIds),
-      this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, email: 1 }),
+      this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, email: 1, phone: 1 }),
     ]);
     const doctorMap = new Map(doctors.map((d) => [d.id, d]));
     const patientMap = new Map(patients.map((p) => [p.id, p]));
@@ -114,16 +116,18 @@ export class AppointmentRemindersCron {
           link: '/appointments',
         });
 
-        if (patient?.email && doctor) {
-          await this.mailService
-            .sendPatientAppointmentReminder(patient.email, {
-              patientName: patient.fullName,
-              doctorName: doctor.fullName,
-              clinicName: clinic?.name ?? 'the clinic',
-              date: dateStr,
-              time,
-            })
-            .catch(() => undefined);
+        if (patient && doctor) {
+          const params = {
+            patientName: patient.fullName,
+            doctorName: doctor.fullName,
+            clinicName: clinic?.name ?? 'the clinic',
+            date: dateStr,
+            time,
+          };
+          const tasks: Promise<void>[] = [];
+          if (patient.email) tasks.push(this.mailService.sendPatientAppointmentReminder(patient.email, params));
+          if (patient.phone) tasks.push(this.smsService.sendPatientAppointmentReminder(patient.phone, params));
+          await Promise.all(tasks.map((t) => t.catch(() => undefined)));
         }
       }),
     );

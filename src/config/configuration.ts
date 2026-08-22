@@ -21,6 +21,13 @@ export default () => ({
     password: process.env.SMTP_PASSWORD,
     from: process.env.SMTP_FROM ?? 'Clinic System <no-reply@example.com>',
   },
+  sms: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID,
+    authToken: process.env.TWILIO_AUTH_TOKEN,
+    fromNumber: process.env.TWILIO_FROM_NUMBER,
+    // Prefixed onto any local-format number (e.g. "01xxxxxxxxx") that isn't already E.164.
+    defaultCountryCode: process.env.SMS_DEFAULT_COUNTRY_CODE ?? '+20',
+  },
   appUrl: process.env.APP_URL ?? 'http://localhost:3000',
   apiUrl: process.env.API_URL ?? 'http://localhost:4000',
 });

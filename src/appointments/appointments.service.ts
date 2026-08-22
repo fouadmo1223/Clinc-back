@@ -13,6 +13,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { ClinicsService } from '../clinics/clinics.service';
 import { MailService } from '../mail/mail.service';
+import { SmsService } from '../common/sms/sms.service';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { parseTime, formatTime, rangesOverlap, TimeRange } from '../common/utils/time.util';
 
@@ -31,6 +32,7 @@ export class AppointmentsService {
     private notificationsService: NotificationsService,
     private clinicsService: ClinicsService,
     private mailService: MailService,
+    private smsService: SmsService,
   ) {}
 
   /** Notifies the doctor's own login (if they have one) — appointments created for a doctor without a user account are silently skipped. */
@@ -45,26 +47,40 @@ export class AppointmentsService {
     await this.notificationsService.notifyDoctorIfLinked({ clinicId, doctor, type, title, message, link: '/appointments' });
   }
 
-  /** Emails the patient directly, if they have one on file — separate from the in-app doctor notification above. */
+  /** Notifies the patient directly — SMS to their phone (always present) and email if they have one on file — separate from the in-app doctor notification above. */
   private async notifyPatient(
     clinicId: string,
-    patient: { email?: string; fullName: string } | null | undefined,
+    patient: { email?: string; phone?: string; fullName: string } | null | undefined,
     doctorName: string,
     kind: 'booked' | 'cancelled' | 'reminder',
     date: string,
     time: string,
     reason?: string,
   ): Promise<void> {
-    if (!patient?.email) return;
+    if (!patient) return;
     const clinic = await this.clinicsService.findById(clinicId).catch(() => null);
     const params = { patientName: patient.fullName, doctorName, clinicName: clinic?.name ?? 'the clinic', date, time };
-    const send =
-      kind === 'booked'
-        ? this.mailService.sendPatientAppointmentBooked(patient.email, params)
-        : kind === 'cancelled'
-          ? this.mailService.sendPatientAppointmentCancelled(patient.email, { ...params, reason })
-          : this.mailService.sendPatientAppointmentReminder(patient.email, params);
-    await send.catch(() => undefined);
+
+    const tasks: Promise<void>[] = [];
+    if (patient.email) {
+      tasks.push(
+        kind === 'booked'
+          ? this.mailService.sendPatientAppointmentBooked(patient.email, params)
+          : kind === 'cancelled'
+            ? this.mailService.sendPatientAppointmentCancelled(patient.email, { ...params, reason })
+            : this.mailService.sendPatientAppointmentReminder(patient.email, params),
+      );
+    }
+    if (patient.phone) {
+      tasks.push(
+        kind === 'booked'
+          ? this.smsService.sendPatientAppointmentBooked(patient.phone, params)
+          : kind === 'cancelled'
+            ? this.smsService.sendPatientAppointmentCancelled(patient.phone, { ...params, reason })
+            : this.smsService.sendPatientAppointmentReminder(patient.phone, params),
+      );
+    }
+    await Promise.all(tasks.map((t) => t.catch(() => undefined)));
   }
 
   private async findRaw(clinicId: string, id: string): Promise<AppointmentDocument> {
@@ -249,7 +265,7 @@ export class AppointmentsService {
     await appointment.save();
 
     const [patient, doctor] = await Promise.all([
-      this.patientModel.findById(appointment.patientId, { fullName: 1, email: 1 }),
+      this.patientModel.findById(appointment.patientId, { fullName: 1, email: 1, phone: 1 }),
       this.doctorsService.findOne(clinicId, appointment.doctorId.toString()).catch(() => null),
     ]);
     const dateStr = appointment.date.toISOString().slice(0, 10);
