@@ -81,6 +81,18 @@ export class AppointmentsService {
       throw new ConflictException('Doctor is not assigned to this branch');
     }
 
+    // One pending appointment per patient/doctor at a time — they must cancel
+    // or complete the existing one before booking another with the same doctor.
+    const existingActive = await this.appointmentModel.findOne({
+      clinicId,
+      doctorId: dto.doctorId,
+      patientId: dto.patientId,
+      status: { $in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+    });
+    if (existingActive) {
+      throw new ConflictException('This patient already has a pending appointment with this doctor');
+    }
+
     const durationMinutes = dto.durationMinutes ?? doctor.defaultAppointmentDurationMinutes;
     await this.assertSlotIsFree(clinicId, dto.doctorId, dto.branchId, dto.date, dto.startTime, durationMinutes);
 
