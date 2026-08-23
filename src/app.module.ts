@@ -32,6 +32,8 @@ import { PdfModule } from './pdf/pdf.module';
 import { AuditLogsModule } from './audit/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PatientPortalModule } from './patient-portal/patient-portal.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
@@ -61,6 +63,8 @@ import { PatientPortalModule } from './patient-portal/patient-portal.module';
     AuditLogsModule,
     NotificationsModule,
     PatientPortalModule,
+    ReviewsModule,
+    PublicModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

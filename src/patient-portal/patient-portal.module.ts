@@ -8,8 +8,12 @@ import { ClinicsModule } from '../clinics/clinics.module';
 import { SmsModule } from '../common/sms/sms.module';
 import { MailModule } from '../mail/mail.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
+import { AvailabilityModule } from '../availability/availability.module';
 import { VisitsModule } from '../visits/visits.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { DoctorsModule } from '../doctors/doctors.module';
+import { BranchesModule } from '../branches/branches.module';
+import { ReviewsModule } from '../reviews/reviews.module';
 import { PatientPortalAuthService } from './patient-portal-auth.service';
 import { PatientPortalController } from './patient-portal.controller';
 import { PatientJwtStrategy } from './strategies/patient-jwt.strategy';
@@ -21,8 +25,12 @@ import { PatientJwtStrategy } from './strategies/patient-jwt.strategy';
     SmsModule,
     MailModule,
     AppointmentsModule,
+    AvailabilityModule,
     VisitsModule,
     DocumentsModule,
+    DoctorsModule,
+    BranchesModule,
+    ReviewsModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

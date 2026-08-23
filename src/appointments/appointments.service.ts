@@ -101,7 +101,8 @@ export class AppointmentsService {
     }
   }
 
-  async create(clinicId: string, user: AuthenticatedUser, dto: CreateAppointmentDto) {
+  /** `createdByUserId` is omitted for patient self-booking (createdBy stays unset — a patient isn't a User). */
+  async create(clinicId: string, dto: CreateAppointmentDto, createdByUserId?: string) {
     const patient = await this.patientModel.findById(dto.patientId);
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');
 
@@ -142,7 +143,7 @@ export class AppointmentsService {
       price,
       reason: dto.reason,
       notes: dto.notes,
-      createdBy: new Types.ObjectId(user.userId),
+      createdBy: createdByUserId ? new Types.ObjectId(createdByUserId) : undefined,
     });
 
     await this.notifyDoctor(

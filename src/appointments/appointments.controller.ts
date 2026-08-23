@@ -20,7 +20,7 @@ export class AppointmentsController {
   @Post()
   @RequirePermissions(Permission.APPOINTMENTS_CREATE)
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateAppointmentDto) {
-    return this.appointmentsService.create(requireClinicId(user), user, dto);
+    return this.appointmentsService.create(requireClinicId(user), dto, user.userId);
   }
 
   @Get()

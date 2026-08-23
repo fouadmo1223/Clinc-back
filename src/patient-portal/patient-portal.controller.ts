@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiTags } from '@nestjs/swagger';
@@ -6,14 +6,21 @@ import { Throttle } from '@nestjs/throttler';
 import { PatientPortalAuthService } from './patient-portal-auth.service';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { PatientJwtAuthGuard } from './guards/patient-jwt-auth.guard';
 import { CurrentPatient } from './decorators/current-patient.decorator';
 import { AuthenticatedPatient } from './strategies/patient-jwt.strategy';
 import { Public } from '../common/decorators/public.decorator';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { AvailabilityService } from '../availability/availability.service';
+import { QueryAvailabilityDto } from '../availability/dto/query-availability.dto';
 import { VisitsService } from '../visits/visits.service';
 import { DocumentsService } from '../documents/documents.service';
+import { DoctorsService } from '../doctors/doctors.service';
+import { BranchesService } from '../branches/branches.service';
+import { ReviewsService } from '../reviews/reviews.service';
+import { CreateReviewDto } from '../reviews/dto/create-review.dto';
 
 @ApiTags('patient-portal')
 @Controller('patient-portal')
@@ -22,8 +29,12 @@ export class PatientPortalController {
     private authService: PatientPortalAuthService,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     private appointmentsService: AppointmentsService,
+    private availabilityService: AvailabilityService,
     private visitsService: VisitsService,
     private documentsService: DocumentsService,
+    private doctorsService: DoctorsService,
+    private branchesService: BranchesService,
+    private reviewsService: ReviewsService,
   ) {}
 
   @Public()
@@ -63,6 +74,40 @@ export class PatientPortalController {
 
   @Public()
   @UseGuards(PatientJwtAuthGuard)
+  @Post('appointments')
+  async bookAppointment(@CurrentPatient() patient: AuthenticatedPatient, @Body() dto: BookAppointmentDto) {
+    return this.appointmentsService.create(patient.clinicId, { ...dto, patientId: patient.patientId });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('doctors')
+  async doctors(@CurrentPatient() patient: AuthenticatedPatient) {
+    return this.doctorsService.findAll(patient.clinicId, false);
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('branches')
+  async branches(@CurrentPatient() patient: AuthenticatedPatient) {
+    return this.branchesService.findAll(patient.clinicId, false);
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('availability')
+  async availability(@CurrentPatient() patient: AuthenticatedPatient, @Query() query: QueryAvailabilityDto) {
+    return this.availabilityService.getAvailableSlots(
+      patient.clinicId,
+      query.doctorId,
+      query.branchId,
+      query.date,
+      query.durationMinutes,
+    );
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
   @Get('visits')
   async visits(@CurrentPatient() patient: AuthenticatedPatient) {
     return this.visitsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
@@ -73,5 +118,12 @@ export class PatientPortalController {
   @Get('documents')
   async documents(@CurrentPatient() patient: AuthenticatedPatient) {
     return this.documentsService.findAll(patient.clinicId, { patientId: patient.patientId });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Post('reviews')
+  async createReview(@CurrentPatient() patient: AuthenticatedPatient, @Body() dto: CreateReviewDto) {
+    return this.reviewsService.create(patient.clinicId, patient.patientId, dto);
   }
 }
