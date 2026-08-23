@@ -11,9 +11,6 @@ import { DoctorsService } from '../doctors/doctors.service';
 import { SchedulesService } from '../schedules/schedules.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
-import { ClinicsService } from '../clinics/clinics.service';
-import { MailService } from '../mail/mail.service';
-import { SmsService } from '../common/sms/sms.service';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { parseTime, formatTime, rangesOverlap, TimeRange } from '../common/utils/time.util';
 
@@ -30,9 +27,6 @@ export class AppointmentsService {
     private doctorsService: DoctorsService,
     private schedulesService: SchedulesService,
     private notificationsService: NotificationsService,
-    private clinicsService: ClinicsService,
-    private mailService: MailService,
-    private smsService: SmsService,
   ) {}
 
   /** Notifies the doctor's own login (if they have one) — appointments created for a doctor without a user account are silently skipped. */
@@ -47,42 +41,6 @@ export class AppointmentsService {
     await this.notificationsService.notifyDoctorIfLinked({ clinicId, doctor, type, title, message, link: '/appointments' });
   }
 
-  /** Notifies the patient directly — SMS to their phone (always present) and email if they have one on file — separate from the in-app doctor notification above. */
-  private async notifyPatient(
-    clinicId: string,
-    patient: { email?: string; phone?: string; fullName: string } | null | undefined,
-    doctorName: string,
-    kind: 'booked' | 'cancelled' | 'reminder',
-    date: string,
-    time: string,
-    reason?: string,
-  ): Promise<void> {
-    if (!patient) return;
-    const clinic = await this.clinicsService.findById(clinicId).catch(() => null);
-    const params = { patientName: patient.fullName, doctorName, clinicName: clinic?.name ?? 'the clinic', date, time };
-
-    const tasks: Promise<void>[] = [];
-    if (patient.email) {
-      tasks.push(
-        kind === 'booked'
-          ? this.mailService.sendPatientAppointmentBooked(patient.email, params)
-          : kind === 'cancelled'
-            ? this.mailService.sendPatientAppointmentCancelled(patient.email, { ...params, reason })
-            : this.mailService.sendPatientAppointmentReminder(patient.email, params),
-      );
-    }
-    if (patient.phone) {
-      tasks.push(
-        kind === 'booked'
-          ? this.smsService.sendPatientAppointmentBooked(patient.phone, params)
-          : kind === 'cancelled'
-            ? this.smsService.sendPatientAppointmentCancelled(patient.phone, { ...params, reason })
-            : this.smsService.sendPatientAppointmentReminder(patient.phone, params),
-      );
-    }
-    await Promise.all(tasks.map((t) => t.catch(() => undefined)));
-  }
-
   private async findRaw(clinicId: string, id: string): Promise<AppointmentDocument> {
     const appointment = await this.appointmentModel.findById(id);
     if (!appointment) throw new NotFoundException('Appointment not found');
@@ -90,7 +48,30 @@ export class AppointmentsService {
     return appointment;
   }
 
-  /** Confirms the requested range doesn't collide with the doctor's working hours, breaks, or other bookings. */
+  /**
+   * A doctor can only physically be in one place — this intentionally is NOT scoped by
+   * branchId, unlike the working-hours check, so a doctor booked at Branch A shows as busy
+   * when booking them at Branch B for the same time. Used both for the booking-collision
+   * check below and by AvailabilityService so the slot picker never offers an already-booked
+   * time regardless of which branch it's booked at.
+   */
+  async getBookedIntervals(
+    clinicId: string,
+    doctorId: string,
+    dateStr: string,
+    excludeAppointmentId?: string,
+  ): Promise<TimeRange[]> {
+    const existing = await this.appointmentModel.find({
+      clinicId,
+      doctorId,
+      date: startOfUtcDay(dateStr),
+      status: { $nin: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
+      ...(excludeAppointmentId ? { _id: { $ne: excludeAppointmentId } } : {}),
+    });
+    return existing.map((a) => ({ start: parseTime(a.startTime), end: parseTime(a.endTime) }));
+  }
+
+  /** Confirms the requested range doesn't collide with the doctor's working hours, breaks, or other bookings (at any branch). */
   private async assertSlotIsFree(
     clinicId: string,
     doctorId: string,
@@ -114,18 +95,9 @@ export class AppointmentsService {
       throw new ConflictException('Requested time overlaps a break or blocked period');
     }
 
-    const existing = await this.appointmentModel.find({
-      clinicId,
-      doctorId,
-      branchId,
-      date: startOfUtcDay(dateStr),
-      status: { $nin: [AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW] },
-      ...(excludeAppointmentId ? { _id: { $ne: excludeAppointmentId } } : {}),
-    });
-
-    const booked: TimeRange[] = existing.map((a) => ({ start: parseTime(a.startTime), end: parseTime(a.endTime) }));
+    const booked = await this.getBookedIntervals(clinicId, doctorId, dateStr, excludeAppointmentId);
     if (booked.some((b) => rangesOverlap(requested, b))) {
-      throw new ConflictException('This time slot is already booked');
+      throw new ConflictException('This time slot is already booked (possibly at another branch)');
     }
   }
 
@@ -180,7 +152,14 @@ export class AppointmentsService {
       'New appointment booked',
       `${patient.fullName} booked ${visitType === VisitType.FOLLOW_UP ? 'a follow-up' : 'a consultation'} on ${dto.date} at ${dto.startTime}`,
     );
-    await this.notifyPatient(clinicId, patient, doctor.fullName, 'booked', dto.date, dto.startTime);
+    await this.notificationsService.notifyPatient({
+      clinicId,
+      patient,
+      doctorName: doctor.fullName,
+      kind: 'booked',
+      date: dto.date,
+      time: dto.startTime,
+    });
 
     return this.enrich([appointment]).then((r) => r[0]);
   }
@@ -276,7 +255,15 @@ export class AppointmentsService {
       'Appointment cancelled',
       `${patient?.fullName ?? 'A patient'}'s appointment on ${dateStr} at ${appointment.startTime} was cancelled${dto.reason ? `: ${dto.reason}` : ''}`,
     );
-    await this.notifyPatient(clinicId, patient, doctor?.fullName ?? 'your doctor', 'cancelled', dateStr, appointment.startTime, dto.reason);
+    await this.notificationsService.notifyPatient({
+      clinicId,
+      patient,
+      doctorName: doctor?.fullName ?? 'your doctor',
+      kind: 'cancelled',
+      date: dateStr,
+      time: appointment.startTime,
+      reason: dto.reason,
+    });
 
     return this.enrich([appointment]).then((r) => r[0]);
   }

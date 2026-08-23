@@ -1,7 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Doctor, DoctorDocument } from './schemas/doctor.schema';
+import { Appointment, AppointmentDocument, AppointmentStatus } from '../appointments/schemas/appointment.schema';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { AuthService } from '../auth/auth.service';
@@ -11,6 +12,7 @@ import { Role } from '../common/constants/roles.enum';
 export class DoctorsService {
   constructor(
     @InjectModel(Doctor.name) private doctorModel: Model<DoctorDocument>,
+    @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     private authService: AuthService,
   ) {}
 
@@ -57,7 +59,26 @@ export class DoctorsService {
     const doctor = await this.findOne(clinicId, id);
     const { branchIds, ...rest } = dto;
     Object.assign(doctor, rest);
-    if (branchIds) doctor.branchIds = branchIds.map((bId) => new Types.ObjectId(bId));
+
+    if (branchIds) {
+      const keptBranchIds = new Set(branchIds);
+      const removedBranchIds = doctor.branchIds.map((b) => b.toString()).filter((b) => !keptBranchIds.has(b));
+      if (removedBranchIds.length > 0) {
+        const hasUpcoming = await this.appointmentModel.exists({
+          clinicId,
+          doctorId: id,
+          branchId: { $in: removedBranchIds },
+          status: { $in: [AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED] },
+        });
+        if (hasUpcoming) {
+          throw new ConflictException(
+            'This doctor has upcoming appointments at a branch you are removing — cancel or reassign them first',
+          );
+        }
+      }
+      doctor.branchIds = branchIds.map((bId) => new Types.ObjectId(bId));
+    }
+
     await doctor.save();
     return doctor;
   }

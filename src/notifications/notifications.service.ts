@@ -4,6 +4,8 @@ import { FilterQuery, Model, Types } from 'mongoose';
 import { Notification, NotificationDocument, NotificationType } from './schemas/notification.schema';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
 import { MailService } from '../mail/mail.service';
+import { SmsService } from '../common/sms/sms.service';
+import { ClinicsService } from '../clinics/clinics.service';
 
 export interface CreateNotificationInput {
   clinicId: string;
@@ -21,6 +23,12 @@ export interface NotifiableDoctor {
   email: string;
 }
 
+export interface NotifiablePatient {
+  email?: string;
+  phone?: string;
+  fullName: string;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger('Notifications');
@@ -28,6 +36,8 @@ export class NotificationsService {
   constructor(
     @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
     private mailService: MailService,
+    private smsService: SmsService,
+    private clinicsService: ClinicsService,
   ) {}
 
   /** Called from other services as a side effect of their own action — a failure here must never break that action. */
@@ -76,6 +86,48 @@ export class NotificationsService {
       link: params.link,
       email: (params.sendEmail ?? true) ? params.doctor.email : undefined,
     });
+  }
+
+  /**
+   * The patient-side counterpart to notifyDoctorIfLinked() — emails (if the patient has one
+   * on file) and always texts (phone is required for every patient) about a booked,
+   * cancelled, or soon-starting appointment. Only requires a patient; the doctor's name is
+   * just display text, so a missing/deleted doctor record never blocks the patient notice.
+   */
+  async notifyPatient(params: {
+    clinicId: string;
+    patient: NotifiablePatient | null | undefined;
+    doctorName: string;
+    kind: 'booked' | 'cancelled' | 'reminder';
+    date: string;
+    time: string;
+    reason?: string;
+  }): Promise<void> {
+    if (!params.patient) return;
+    const { patient, doctorName, kind, date, time, reason } = params;
+    const clinic = await this.clinicsService.findById(params.clinicId).catch(() => null);
+    const base = { patientName: patient.fullName, doctorName, clinicName: clinic?.name ?? 'the clinic', date, time };
+
+    const tasks: Promise<void>[] = [];
+    if (patient.email) {
+      tasks.push(
+        kind === 'booked'
+          ? this.mailService.sendPatientAppointmentBooked(patient.email, base)
+          : kind === 'cancelled'
+            ? this.mailService.sendPatientAppointmentCancelled(patient.email, { ...base, reason })
+            : this.mailService.sendPatientAppointmentReminder(patient.email, base),
+      );
+    }
+    if (patient.phone) {
+      tasks.push(
+        kind === 'booked'
+          ? this.smsService.sendPatientAppointmentBooked(patient.phone, base)
+          : kind === 'cancelled'
+            ? this.smsService.sendPatientAppointmentCancelled(patient.phone, { ...base, reason })
+            : this.smsService.sendPatientAppointmentReminder(patient.phone, base),
+      );
+    }
+    await Promise.all(tasks.map((t) => t.catch(() => undefined)));
   }
 
   async findAll(clinicId: string, userId: string, query: QueryNotificationsDto) {

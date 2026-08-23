@@ -5,9 +5,6 @@ import { Model } from 'mongoose';
 import { Appointment, AppointmentDocument, AppointmentStatus } from './schemas/appointment.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { DoctorsService } from '../doctors/doctors.service';
-import { ClinicsService } from '../clinics/clinics.service';
-import { MailService } from '../mail/mail.service';
-import { SmsService } from '../common/sms/sms.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { formatTime, parseTime } from '../common/utils/time.util';
@@ -28,9 +25,6 @@ export class AppointmentRemindersCron {
     @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     private doctorsService: DoctorsService,
-    private clinicsService: ClinicsService,
-    private mailService: MailService,
-    private smsService: SmsService,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -92,8 +86,7 @@ export class AppointmentRemindersCron {
   private async sendRemindersForClinic(clinicId: string, appointments: AppointmentDocument[]) {
     const doctorIds = [...new Set(appointments.map((a) => a.doctorId.toString()))];
     const patientIds = [...new Set(appointments.map((a) => a.patientId.toString()))];
-    const [clinic, doctors, patients] = await Promise.all([
-      this.clinicsService.findById(clinicId).catch(() => null),
+    const [doctors, patients] = await Promise.all([
       this.doctorsService.findByIds(clinicId, doctorIds),
       this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, email: 1, phone: 1 }),
     ]);
@@ -116,19 +109,17 @@ export class AppointmentRemindersCron {
           link: '/appointments',
         });
 
-        if (patient && doctor) {
-          const params = {
-            patientName: patient.fullName,
-            doctorName: doctor.fullName,
-            clinicName: clinic?.name ?? 'the clinic',
-            date: dateStr,
-            time,
-          };
-          const tasks: Promise<void>[] = [];
-          if (patient.email) tasks.push(this.mailService.sendPatientAppointmentReminder(patient.email, params));
-          if (patient.phone) tasks.push(this.smsService.sendPatientAppointmentReminder(patient.phone, params));
-          await Promise.all(tasks.map((t) => t.catch(() => undefined)));
-        }
+        // Doctor is only display text here — a deleted/missing doctor record must never
+        // silently drop the patient's reminder (this appointment was already atomically
+        // claimed above, so a skipped send here would be lost, not retried).
+        await this.notificationsService.notifyPatient({
+          clinicId,
+          patient,
+          doctorName: doctor?.fullName ?? 'your doctor',
+          kind: 'reminder',
+          date: dateStr,
+          time,
+        });
       }),
     );
   }

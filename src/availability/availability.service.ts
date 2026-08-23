@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SchedulesService } from '../schedules/schedules.service';
 import { DoctorsService } from '../doctors/doctors.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { subtractRanges, generateSlots, formatTime, TimeRange } from '../common/utils/time.util';
 
 export interface AvailabilityResult {
@@ -18,16 +19,14 @@ export class AvailabilityService {
   constructor(
     private schedulesService: SchedulesService,
     private doctorsService: DoctorsService,
+    private appointmentsService: AppointmentsService,
   ) {}
 
   /**
    * The core availability calculation: weekly schedule + exceptions (breaks,
    * leave, custom/extra hours, blocked time) minus already-booked appointment
-   * intervals, sliced into fixed-duration slots.
-   *
-   * `bookedIntervals` is supplied by the appointments module (not built yet)
-   * so a booked slot never shows as free — the conflict engine reuses this
-   * exact subtractRanges() call rather than duplicating the logic.
+   * intervals (at ANY branch — a doctor can only be in one place), sliced
+   * into fixed-duration slots.
    */
   async getAvailableSlots(
     clinicId: string,
@@ -35,12 +34,14 @@ export class AvailabilityService {
     branchId: string,
     dateStr: string,
     durationMinutes?: number,
-    bookedIntervals: TimeRange[] = [],
   ): Promise<AvailabilityResult> {
     const doctor = await this.doctorsService.findOne(clinicId, doctorId);
     const duration = durationMinutes ?? doctor.defaultAppointmentDurationMinutes;
 
-    const dayInfo = await this.schedulesService.getEffectiveDayInfo(clinicId, doctorId, branchId, dateStr);
+    const [dayInfo, bookedIntervals] = await Promise.all([
+      this.schedulesService.getEffectiveDayInfo(clinicId, doctorId, branchId, dateStr),
+      this.appointmentsService.getBookedIntervals(clinicId, doctorId, dateStr),
+    ]);
 
     if (dayInfo.isFullyClosed) {
       return {

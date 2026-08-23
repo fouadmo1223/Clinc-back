@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsArray, IsDateString, IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class CreatePatientDto {
@@ -9,7 +10,10 @@ export class CreatePatientDto {
   @MinLength(6)
   phone: string;
 
+  // An empty string is treated the same as omitting the field, rather than a validation
+  // error — a blank "email" input on the frontend form submits '' when cleared.
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsEmail()
   email?: string;
 

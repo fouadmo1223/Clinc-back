@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { QueueEntry, QueueEntryDocument, QueueStatus } from './schemas/queue-entry.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import { Branch, BranchDocument } from '../branches/schemas/branch.schema';
 import { Appointment, AppointmentDocument, AppointmentStatus } from '../appointments/schemas/appointment.schema';
 import { CheckInDto } from './dto/check-in.dto';
 import { UpdateQueueEntryDto } from './dto/update-queue-entry.dto';
@@ -23,6 +24,7 @@ export class QueueService {
     @InjectModel(QueueEntry.name) private queueModel: Model<QueueEntryDocument>,
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
     @InjectModel(Appointment.name) private appointmentModel: Model<AppointmentDocument>,
+    @InjectModel(Branch.name) private branchModel: Model<BranchDocument>,
     private doctorsService: DoctorsService,
     private appointmentsService: AppointmentsService,
     private notificationsService: NotificationsService,
@@ -31,7 +33,12 @@ export class QueueService {
   async checkIn(clinicId: string, user: AuthenticatedUser, dto: CheckInDto) {
     const patient = await this.patientModel.findById(dto.patientId);
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');
-    if (dto.doctorId) await this.doctorsService.findOne(clinicId, dto.doctorId);
+    if (dto.doctorId) {
+      const doctor = await this.doctorsService.findOne(clinicId, dto.doctorId);
+      if (!doctor.branchIds.some((b) => b.toString() === dto.branchId)) {
+        throw new BadRequestException('This doctor is not assigned to the selected branch');
+      }
+    }
 
     let appointment: AppointmentDocument | null = null;
     if (dto.appointmentId) {
@@ -137,27 +144,33 @@ export class QueueService {
     const doctorIds = [...new Set(entries.filter((e) => e.doctorId).map((e) => e.doctorId!.toString()))];
     const appointmentIds = [...new Set(entries.filter((e) => e.appointmentId).map((e) => e.appointmentId!.toString()))];
 
-    const [patients, doctors, appointments] = await Promise.all([
+    const branchIds = [...new Set(entries.map((e) => e.branchId.toString()))];
+
+    const [patients, doctors, appointments, branches] = await Promise.all([
       this.patientModel.find({ _id: { $in: patientIds } }, { fullName: 1, phone: 1 }),
       this.doctorsService.findByIds(clinicId, doctorIds),
       this.appointmentModel.find({ _id: { $in: appointmentIds } }, { startTime: 1 }),
+      this.branchModel.find({ _id: { $in: branchIds } }, { name: 1, nameAr: 1 }),
     ]);
 
     const patientMap = new Map(patients.map((p) => [p.id, p]));
     const doctorMap = new Map(doctors.filter((d): d is NonNullable<typeof d> => !!d).map((d) => [d.id, d]));
     const appointmentMap = new Map(appointments.map((a) => [a.id, a]));
+    const branchMap = new Map(branches.map((b) => [b.id, b]));
 
     return entries.map((e) => {
       const obj = e.toObject();
       const patient = patientMap.get(e.patientId.toString());
       const doctor = e.doctorId ? doctorMap.get(e.doctorId.toString()) : undefined;
       const appointment = e.appointmentId ? appointmentMap.get(e.appointmentId.toString()) : undefined;
+      const branch = branchMap.get(e.branchId.toString());
       return {
         ...obj,
         patientName: patient?.fullName,
         patientPhone: patient?.phone,
         doctorName: doctor?.fullName,
         appointmentStartTime: appointment?.startTime,
+        branchName: branch?.name,
       };
     });
   }

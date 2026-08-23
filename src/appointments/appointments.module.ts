@@ -7,9 +7,6 @@ import { PatientsModule } from '../patients/patients.module';
 import { DoctorsModule } from '../doctors/doctors.module';
 import { SchedulesModule } from '../schedules/schedules.module';
 import { NotificationsModule } from '../notifications/notifications.module';
-import { ClinicsModule } from '../clinics/clinics.module';
-import { MailModule } from '../mail/mail.module';
-import { SmsModule } from '../common/sms/sms.module';
 import { AppointmentRemindersCron } from './appointment-reminders.cron';
 
 @Module({
@@ -19,9 +16,6 @@ import { AppointmentRemindersCron } from './appointment-reminders.cron';
     DoctorsModule,
     SchedulesModule,
     NotificationsModule,
-    ClinicsModule,
-    MailModule,
-    SmsModule,
   ],
   providers: [AppointmentsService, AppointmentRemindersCron],
   controllers: [AppointmentsController],
