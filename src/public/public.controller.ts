@@ -26,4 +26,9 @@ export class PublicController {
   listDoctorReviews(@Param('slug') slug: string, @Param('doctorId') doctorId: string) {
     return this.publicService.listDoctorReviews(slug, doctorId);
   }
+
+  @Get('testimonials')
+  listTestimonials(@Param('slug') slug: string) {
+    return this.publicService.listTestimonials(slug);
+  }
 }

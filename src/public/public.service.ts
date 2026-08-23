@@ -47,4 +47,22 @@ export class PublicService {
     const clinic = await this.clinicsService.findBySlug(slug);
     return this.reviewsService.listForDoctor(clinic.id, doctorId);
   }
+
+  /** Recent commented reviews across every doctor, with the doctor's name attached — for the landing page testimonials. */
+  async listTestimonials(slug: string) {
+    const clinic = await this.clinicsService.findBySlug(slug);
+    const reviews = await this.reviewsService.listRecentWithComments(clinic.id);
+    const doctorIds = [...new Set(reviews.map((r) => r.doctorId.toString()))];
+    const doctors = await this.doctorsService.findByIds(clinic.id, doctorIds);
+    const doctorMap = new Map(doctors.map((d) => [d.id, d]));
+
+    return reviews.map((r) => ({
+      rating: r.rating,
+      comment: r.comment,
+      createdAt: r.get('createdAt') as Date,
+      doctorName: doctorMap.get(r.doctorId.toString())?.fullName ?? '',
+      doctorSpecialty: doctorMap.get(r.doctorId.toString())?.specialty ?? '',
+      doctorSpecialtyAr: doctorMap.get(r.doctorId.toString())?.specialtyAr ?? '',
+    }));
+  }
 }

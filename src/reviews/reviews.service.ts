@@ -58,4 +58,12 @@ export class ReviewsService {
       .sort({ createdAt: -1 })
       .limit(50);
   }
+
+  /** Recent reviews across every doctor in the clinic, with commentary only — powers the landing page testimonials strip. */
+  async listRecentWithComments(clinicId: string, limit = 12) {
+    return this.reviewModel
+      .find({ clinicId, comment: { $exists: true, $ne: '' } }, { doctorId: 1, rating: 1, comment: 1, createdAt: 1 })
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  }
 }
