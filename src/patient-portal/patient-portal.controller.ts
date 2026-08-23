@@ -30,14 +30,14 @@ export class PatientPortalController {
   @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('auth/request-otp')
   requestOtp(@Body() dto: RequestOtpDto) {
-    return this.authService.requestOtp(dto.clinicSlug, dto.phone);
+    return this.authService.requestOtp(dto.clinicSlug, dto.phone, dto.email);
   }
 
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('auth/verify-otp')
   verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto.clinicSlug, dto.phone, dto.code);
+    return this.authService.verifyOtp(dto.clinicSlug, dto.phone, dto.email, dto.code);
   }
 
   @Public()

@@ -76,6 +76,14 @@ export class MailService {
     );
   }
 
+  async sendPatientOtp(to: string, code: string, clinicName: string) {
+    await this.send(
+      to,
+      `${clinicName} verification code`,
+      this.wrap('Your verification code', `<p style="font-size:28px;font-weight:700;letter-spacing:0.3em">${esc(code)}</p><p>This code expires in 10 minutes.</p>`),
+    );
+  }
+
   /** Mirrors an in-app staff/doctor notification (appointment booked/cancelled/reminder) out to email. */
   async sendNotificationEmail(to: string, title: string, message: string, link?: string) {
     const appUrl = this.config.get<string>('appUrl');

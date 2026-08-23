@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Patient, PatientSchema } from '../patients/schemas/patient.schema';
 import { ClinicsModule } from '../clinics/clinics.module';
 import { SmsModule } from '../common/sms/sms.module';
+import { MailModule } from '../mail/mail.module';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { VisitsModule } from '../visits/visits.module';
 import { DocumentsModule } from '../documents/documents.module';
@@ -18,6 +19,7 @@ import { PatientJwtStrategy } from './strategies/patient-jwt.strategy';
     MongooseModule.forFeature([{ name: Patient.name, schema: PatientSchema }]),
     ClinicsModule,
     SmsModule,
+    MailModule,
     AppointmentsModule,
     VisitsModule,
     DocumentsModule,
