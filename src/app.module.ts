@@ -31,6 +31,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PdfModule } from './pdf/pdf.module';
 import { AuditLogsModule } from './audit/audit-logs.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PatientPortalModule } from './patient-portal/patient-portal.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     PdfModule,
     AuditLogsModule,
     NotificationsModule,
+    PatientPortalModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

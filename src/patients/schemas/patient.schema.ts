@@ -53,6 +53,13 @@ export class Patient {
 
   @Prop({ default: true })
   isActive: boolean;
+
+  // Patient-portal OTP login — never returned by default queries.
+  @Prop({ select: false })
+  otpCodeHash?: string;
+
+  @Prop({ select: false })
+  otpExpiresAt?: Date;
 }
 
 export const PatientSchema = SchemaFactory.createForClass(Patient);

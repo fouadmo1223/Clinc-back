@@ -8,6 +8,11 @@ export default () => ({
     accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
     refreshSecret: process.env.JWT_REFRESH_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '30d',
+    // A separate secret keeps patient-portal tokens cryptographically distinct from staff
+    // tokens; falls back to the staff secret so the portal works with zero extra env setup
+    // in dev, but production should set PATIENT_JWT_SECRET to a different value.
+    patientSecret: process.env.PATIENT_JWT_SECRET ?? process.env.JWT_SECRET,
+    patientExpiresIn: process.env.PATIENT_JWT_EXPIRES_IN ?? '30m',
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,

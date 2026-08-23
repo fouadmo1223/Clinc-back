@@ -1,0 +1,77 @@
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { PatientPortalAuthService } from './patient-portal-auth.service';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { PatientJwtAuthGuard } from './guards/patient-jwt-auth.guard';
+import { CurrentPatient } from './decorators/current-patient.decorator';
+import { AuthenticatedPatient } from './strategies/patient-jwt.strategy';
+import { Public } from '../common/decorators/public.decorator';
+import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import { AppointmentsService } from '../appointments/appointments.service';
+import { VisitsService } from '../visits/visits.service';
+import { DocumentsService } from '../documents/documents.service';
+
+@ApiTags('patient-portal')
+@Controller('patient-portal')
+export class PatientPortalController {
+  constructor(
+    private authService: PatientPortalAuthService,
+    @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
+    private appointmentsService: AppointmentsService,
+    private visitsService: VisitsService,
+    private documentsService: DocumentsService,
+  ) {}
+
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('auth/request-otp')
+  requestOtp(@Body() dto: RequestOtpDto) {
+    return this.authService.requestOtp(dto.clinicSlug, dto.phone);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('auth/verify-otp')
+  verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.clinicSlug, dto.phone, dto.code);
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('me')
+  async me(@CurrentPatient() patient: AuthenticatedPatient) {
+    // Only safe, self-descriptive fields — never medical data or internal staff notes here.
+    return this.patientModel.findById(patient.patientId, {
+      fullName: 1,
+      phone: 1,
+      email: 1,
+      gender: 1,
+      dateOfBirth: 1,
+    });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('appointments')
+  async appointments(@CurrentPatient() patient: AuthenticatedPatient) {
+    return this.appointmentsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('visits')
+  async visits(@CurrentPatient() patient: AuthenticatedPatient) {
+    return this.visitsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Get('documents')
+  async documents(@CurrentPatient() patient: AuthenticatedPatient) {
+    return this.documentsService.findAll(patient.clinicId, { patientId: patient.patientId });
+  }
+}

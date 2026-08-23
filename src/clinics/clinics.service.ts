@@ -41,6 +41,13 @@ export class ClinicsService {
     return this.clinicModel.findById(id);
   }
 
+  /** Unauthenticated lookup used by the patient portal to resolve a clinic from its URL slug. */
+  async findBySlug(slug: string): Promise<ClinicDocument> {
+    const clinic = await this.clinicModel.findOne({ slug, isActive: true });
+    if (!clinic) throw new NotFoundException('Clinic not found');
+    return clinic;
+  }
+
   async update(id: string, data: UpdateClinicDto): Promise<ClinicDocument> {
     const clinic = await this.findById(id);
     Object.assign(clinic, data);
