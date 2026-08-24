@@ -21,7 +21,7 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { QueryAvailabilityDto } from '../availability/dto/query-availability.dto';
 import { VisitsService } from '../visits/visits.service';
-import { DocumentsService } from '../documents/documents.service';
+import { DocumentsService, MAX_FILE_SIZE_BYTES } from '../documents/documents.service';
 import { PatientUploadDocumentDto } from '../documents/dto/patient-upload-document.dto';
 import { DoctorsService } from '../doctors/doctors.service';
 import { BranchesService } from '../branches/branches.service';
@@ -155,7 +155,7 @@ export class PatientPortalController {
   @Public()
   @UseGuards(PatientJwtAuthGuard)
   @Post('documents')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE_BYTES } }))
   async uploadDocument(
     @CurrentPatient() patient: AuthenticatedPatient,
     @Body() dto: PatientUploadDocumentDto,

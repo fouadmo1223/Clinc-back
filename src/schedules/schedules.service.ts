@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { DoctorSchedule, DoctorScheduleDocument } from './schemas/doctor-schedule.schema';
@@ -11,6 +11,15 @@ import {
 import { SetWeeklyScheduleDto } from './dto/set-weekly-schedule.dto';
 import { CreateScheduleExceptionDto } from './dto/create-schedule-exception.dto';
 import { parseTime, TimeRange } from '../common/utils/time.util';
+import { DoctorsService } from '../doctors/doctors.service';
+
+/** Confirms the doctor belongs to this clinic and is actually assigned to the given branch — mirrors the same check in AppointmentsService.create(). */
+async function assertDoctorInBranch(doctorsService: DoctorsService, clinicId: string, doctorId: string, branchId: string): Promise<void> {
+  const doctor = await doctorsService.findOne(clinicId, doctorId);
+  if (!doctor.branchIds.some((b) => b.toString() === branchId)) {
+    throw new ConflictException('Doctor is not assigned to this branch');
+  }
+}
 
 function startOfUtcDay(dateStr: string): Date {
   const d = new Date(dateStr);
@@ -29,12 +38,15 @@ export class SchedulesService {
   constructor(
     @InjectModel(DoctorSchedule.name) private scheduleModel: Model<DoctorScheduleDocument>,
     @InjectModel(ScheduleException.name) private exceptionModel: Model<ScheduleExceptionDocument>,
+    private doctorsService: DoctorsService,
   ) {}
 
   async setWeeklySchedule(clinicId: string, doctorId: string, branchId: string, dto: SetWeeklyScheduleDto) {
+    await assertDoctorInBranch(this.doctorsService, clinicId, doctorId, branchId);
+
     const ops = dto.days.map((day) => ({
       updateOne: {
-        filter: { doctorId, branchId, dayOfWeek: day.dayOfWeek },
+        filter: { clinicId, doctorId, branchId, dayOfWeek: day.dayOfWeek },
         update: {
           $set: {
             clinicId: new Types.ObjectId(clinicId),
@@ -60,6 +72,8 @@ export class SchedulesService {
   }
 
   async createException(clinicId: string, userId: string, dto: CreateScheduleExceptionDto) {
+    await assertDoctorInBranch(this.doctorsService, clinicId, dto.doctorId, dto.branchId);
+
     return this.exceptionModel.create({
       clinicId: new Types.ObjectId(clinicId),
       doctorId: new Types.ObjectId(dto.doctorId),

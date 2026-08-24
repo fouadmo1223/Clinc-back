@@ -4,6 +4,7 @@ import { DoctorSchedule, DoctorScheduleSchema } from './schemas/doctor-schedule.
 import { ScheduleException, ScheduleExceptionSchema } from './schemas/schedule-exception.schema';
 import { SchedulesService } from './schedules.service';
 import { SchedulesController } from './schedules.controller';
+import { DoctorsModule } from '../doctors/doctors.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { SchedulesController } from './schedules.controller';
       { name: DoctorSchedule.name, schema: DoctorScheduleSchema },
       { name: ScheduleException.name, schema: ScheduleExceptionSchema },
     ]),
+    DoctorsModule,
   ],
   providers: [SchedulesService],
   controllers: [SchedulesController],

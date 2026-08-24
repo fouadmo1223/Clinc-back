@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { DocumentsService } from './documents.service';
+import { DocumentsService, MAX_FILE_SIZE_BYTES } from './documents.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { QueryDocumentsDto } from './dto/query-documents.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -19,7 +19,7 @@ export class DocumentsController {
   @Post()
   @ApiConsumes('multipart/form-data')
   @RequirePermissions(Permission.DOCUMENTS_UPLOAD)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE_BYTES } }))
   upload(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UploadDocumentDto,

@@ -8,7 +8,7 @@ import { UploadDocumentDto, ALLOWED_DOCUMENT_MIME_TYPES } from './dto/upload-doc
 import { QueryDocumentsDto } from './dto/query-documents.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 
-const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
+export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 
 @Injectable()
 export class DocumentsService {
