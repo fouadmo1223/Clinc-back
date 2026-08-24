@@ -13,6 +13,7 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { QueueGateway } from './queue.gateway';
 
 function startOfUtcDay(date: Date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -28,6 +29,7 @@ export class QueueService {
     private doctorsService: DoctorsService,
     private appointmentsService: AppointmentsService,
     private notificationsService: NotificationsService,
+    private queueGateway: QueueGateway,
   ) {}
 
   async checkIn(clinicId: string, user: AuthenticatedUser, dto: CheckInDto) {
@@ -95,7 +97,9 @@ export class QueueService {
       });
     }
 
-    return this.enrich([entry]).then((r) => r[0]);
+    const [enriched] = await this.enrich([entry]);
+    this.queueGateway.emitCheckedIn(clinicId, enriched);
+    return enriched;
   }
 
   async findAll(clinicId: string, query: QueryQueueDto) {
@@ -134,7 +138,9 @@ export class QueueService {
         .catch(() => undefined);
     }
 
-    return this.enrich([entry]).then((r) => r[0]);
+    const [enriched] = await this.enrich([entry]);
+    this.queueGateway.emitUpdated(clinicId, enriched);
+    return enriched;
   }
 
   private async enrich(entries: QueueEntryDocument[]) {
