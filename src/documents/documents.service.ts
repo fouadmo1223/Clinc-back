@@ -79,7 +79,9 @@ export class DocumentsService {
     const filter: FilterQuery<ClinicDocumentDocument> = { clinicId };
     if (query.patientId) filter.patientId = query.patientId;
     if (query.visitId) filter.visitId = query.visitId;
-    return this.documentModel.find(filter).sort({ createdAt: -1 });
+    // Callers always scope by patientId/visitId in practice; this cap is only a safety net
+    // against an unscoped clinic-wide call growing unbounded.
+    return this.documentModel.find(filter).sort({ createdAt: -1 }).limit(2000);
   }
 
   async remove(clinicId: string, id: string) {

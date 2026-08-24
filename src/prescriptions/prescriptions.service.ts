@@ -55,7 +55,9 @@ export class PrescriptionsService {
     if (query.patientId) filter.patientId = query.patientId;
     if (query.visitId) filter.visitId = query.visitId;
 
-    const items = await this.prescriptionModel.find(filter).sort({ createdAt: -1 });
+    // Callers always scope by patientId/visitId in practice; this cap is only a safety net
+    // against an unscoped clinic-wide call growing unbounded.
+    const items = await this.prescriptionModel.find(filter).sort({ createdAt: -1 }).limit(2000);
     return this.enrich(items);
   }
 

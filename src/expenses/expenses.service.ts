@@ -23,6 +23,9 @@ export class ExpensesService {
   }
 
   async findAll(clinicId: string, query: QueryExpensesDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+
     const filter: FilterQuery<ExpenseDocument> = { clinicId };
     if (query.branchId) filter.branchId = query.branchId;
     if (query.from || query.to) {
@@ -34,7 +37,36 @@ export class ExpensesService {
       if (query.to) range.$lte = new Date(new Date(query.to).getTime() + 24 * 60 * 60 * 1000 - 1);
       filter.date = range;
     }
-    return this.expenseModel.find(filter).sort({ date: -1 });
+
+    // Aggregation pipelines skip Mongoose's automatic string->ObjectId casting that find()
+    // does, so clinicId/branchId need to be cast explicitly here or $match silently matches
+    // nothing.
+    const aggregateMatch: Record<string, unknown> = { ...filter, clinicId: new Types.ObjectId(clinicId) };
+    if (query.branchId) aggregateMatch.branchId = new Types.ObjectId(query.branchId);
+
+    const [items, total, totalAmountResult] = await Promise.all([
+      this.expenseModel
+        .find(filter)
+        .sort({ date: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      this.expenseModel.countDocuments(filter),
+      // Sum over the whole filtered set (not just the current page), computed in the DB
+      // rather than reduced in Node, so the displayed total stays accurate under pagination.
+      this.expenseModel.aggregate<{ _id: null; total: number }>([
+        { $match: aggregateMatch },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      totalAmount: totalAmountResult[0]?.total ?? 0,
+    };
   }
 
   async remove(clinicId: string, id: string) {

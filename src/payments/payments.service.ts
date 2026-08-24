@@ -59,6 +59,8 @@ export class PaymentsService {
     const filter: FilterQuery<PaymentDocument> = { clinicId };
     if (query.invoiceId) filter.invoiceId = query.invoiceId;
     if (query.patientId) filter.patientId = query.patientId;
-    return this.paymentModel.find(filter).sort({ paidAt: -1 });
+    // Callers always scope by invoiceId/patientId in practice (a handful of payments each);
+    // this cap is only a safety net against an unscoped clinic-wide call growing unbounded.
+    return this.paymentModel.find(filter).sort({ paidAt: -1 }).limit(2000);
   }
 }
