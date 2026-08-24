@@ -47,6 +47,34 @@ export class DocumentsService {
     return document;
   }
 
+  /**
+   * Patient uploading their own document via the portal (e.g. an external lab result they
+   * want their doctor to see). patientId comes from the JWT, never the request body, so a
+   * patient can never attach a document to someone else's record. No uploadedBy — that field
+   * is a staff-user reference and patients don't have one.
+   */
+  async uploadByPatient(clinicId: string, patientId: string, dto: Pick<UploadDocumentDto, 'category' | 'notes'>, file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('A file is required');
+    if (file.size > MAX_FILE_SIZE_BYTES) throw new BadRequestException('File exceeds the 15MB limit');
+    if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.mimetype)) {
+      throw new BadRequestException('Unsupported file type. Allowed: PDF, JPEG, PNG, WEBP, DOC, DOCX');
+    }
+
+    const result = await this.cloudinary.uploadBuffer(file.buffer, `clinic/${clinicId}/patients/${patientId}`);
+
+    return this.documentModel.create({
+      clinicId: new Types.ObjectId(clinicId),
+      patientId: new Types.ObjectId(patientId),
+      fileName: file.originalname,
+      fileUrl: result.secure_url,
+      cloudinaryPublicId: result.public_id,
+      mimeType: file.mimetype,
+      fileSizeBytes: file.size,
+      category: dto.category ?? DocumentCategory.OTHER,
+      notes: dto.notes,
+    });
+  }
+
   async findAll(clinicId: string, query: QueryDocumentsDto) {
     const filter: FilterQuery<ClinicDocumentDocument> = { clinicId };
     if (query.patientId) filter.patientId = query.patientId;

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ApiTags } from '@nestjs/swagger';
@@ -8,16 +9,20 @@ import { RequestOtpDto } from './dto/request-otp.dto';
 import { RegisterPatientDto } from './dto/register-patient.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
+import { CancelOwnAppointmentDto } from './dto/cancel-own-appointment.dto';
 import { PatientJwtAuthGuard } from './guards/patient-jwt-auth.guard';
 import { CurrentPatient } from './decorators/current-patient.decorator';
 import { AuthenticatedPatient } from './strategies/patient-jwt.strategy';
 import { Public } from '../common/decorators/public.decorator';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
+import { PatientsService } from '../patients/patients.service';
+import { UpdateOwnProfileDto } from '../patients/dto/update-own-profile.dto';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { QueryAvailabilityDto } from '../availability/dto/query-availability.dto';
 import { VisitsService } from '../visits/visits.service';
 import { DocumentsService } from '../documents/documents.service';
+import { PatientUploadDocumentDto } from '../documents/dto/patient-upload-document.dto';
 import { DoctorsService } from '../doctors/doctors.service';
 import { BranchesService } from '../branches/branches.service';
 import { ReviewsService } from '../reviews/reviews.service';
@@ -33,6 +38,7 @@ export class PatientPortalController {
     private availabilityService: AvailabilityService,
     private visitsService: VisitsService,
     private documentsService: DocumentsService,
+    private patientsService: PatientsService,
     private doctorsService: DoctorsService,
     private branchesService: BranchesService,
     private reviewsService: ReviewsService,
@@ -75,6 +81,13 @@ export class PatientPortalController {
 
   @Public()
   @UseGuards(PatientJwtAuthGuard)
+  @Patch('me')
+  async updateMe(@CurrentPatient() patient: AuthenticatedPatient, @Body() dto: UpdateOwnProfileDto) {
+    return this.patientsService.updateSelf(patient.clinicId, patient.patientId, dto);
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
   @Get('appointments')
   async appointments(@CurrentPatient() patient: AuthenticatedPatient) {
     return this.appointmentsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
@@ -85,6 +98,17 @@ export class PatientPortalController {
   @Post('appointments')
   async bookAppointment(@CurrentPatient() patient: AuthenticatedPatient, @Body() dto: BookAppointmentDto) {
     return this.appointmentsService.create(patient.clinicId, { ...dto, patientId: patient.patientId });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Post('appointments/:id/cancel')
+  async cancelAppointment(
+    @CurrentPatient() patient: AuthenticatedPatient,
+    @Param('id') id: string,
+    @Body() dto: CancelOwnAppointmentDto,
+  ) {
+    return this.appointmentsService.cancelByPatient(patient.clinicId, patient.patientId, id, dto.reason);
   }
 
   @Public()
@@ -126,6 +150,18 @@ export class PatientPortalController {
   @Get('documents')
   async documents(@CurrentPatient() patient: AuthenticatedPatient) {
     return this.documentsService.findAll(patient.clinicId, { patientId: patient.patientId });
+  }
+
+  @Public()
+  @UseGuards(PatientJwtAuthGuard)
+  @Post('documents')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadDocument(
+    @CurrentPatient() patient: AuthenticatedPatient,
+    @Body() dto: PatientUploadDocumentDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.documentsService.uploadByPatient(patient.clinicId, patient.patientId, dto, file);
   }
 
   @Public()

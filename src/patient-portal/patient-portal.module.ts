@@ -11,6 +11,7 @@ import { AppointmentsModule } from '../appointments/appointments.module';
 import { AvailabilityModule } from '../availability/availability.module';
 import { VisitsModule } from '../visits/visits.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { PatientsModule } from '../patients/patients.module';
 import { DoctorsModule } from '../doctors/doctors.module';
 import { BranchesModule } from '../branches/branches.module';
 import { ReviewsModule } from '../reviews/reviews.module';
@@ -28,6 +29,7 @@ import { PatientJwtStrategy } from './strategies/patient-jwt.strategy';
     AvailabilityModule,
     VisitsModule,
     DocumentsModule,
+    PatientsModule,
     DoctorsModule,
     BranchesModule,
     ReviewsModule,

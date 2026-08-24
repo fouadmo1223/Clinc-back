@@ -4,6 +4,7 @@ import { Model, Types, FilterQuery } from 'mongoose';
 import { Patient, PatientDocument } from './schemas/patient.schema';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+import { UpdateOwnProfileDto } from './dto/update-own-profile.dto';
 import { QueryPatientsDto } from './dto/query-patients.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { Permission } from '../common/constants/permissions.enum';
@@ -97,6 +98,25 @@ export class PatientsService {
     Object.assign(patient, dto);
     await patient.save();
     return this.sanitize(patient, user);
+  }
+
+  /** Patient editing their own profile via the portal — see UpdateOwnProfileDto for why this is a much smaller field set than the staff-facing update(). */
+  async updateSelf(clinicId: string, patientId: string, dto: UpdateOwnProfileDto) {
+    const patient = await this.patientModel.findOne({ _id: patientId, clinicId, isActive: true });
+    if (!patient) throw new NotFoundException('Patient not found');
+
+    Object.assign(patient, dto);
+    await patient.save();
+
+    return {
+      fullName: patient.fullName,
+      phone: patient.phone,
+      email: patient.email,
+      dateOfBirth: patient.dateOfBirth,
+      address: patient.address,
+      emergencyContactName: patient.emergencyContactName,
+      emergencyContactPhone: patient.emergencyContactPhone,
+    };
   }
 
   async deactivate(clinicId: string, user: AuthenticatedUser, id: string) {

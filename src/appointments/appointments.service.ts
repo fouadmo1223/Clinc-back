@@ -83,6 +83,16 @@ export class AppointmentsService {
   ): Promise<void> {
     const requested: TimeRange = { start: parseTime(startTime), end: parseTime(startTime) + durationMinutes };
 
+    // Belt-and-suspenders against booking the past: the availability listing already hides
+    // passed slots, but nothing stopped a direct API call (staff or patient-portal) from
+    // requesting a bygone date/time anyway.
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (dateStr < todayStr) throw new ConflictException('Cannot book an appointment in the past');
+    if (dateStr === todayStr && requested.start <= now.getHours() * 60 + now.getMinutes()) {
+      throw new ConflictException('This time has already passed today');
+    }
+
     const dayInfo = await this.schedulesService.getEffectiveDayInfo(clinicId, doctorId, branchId, dateStr);
     if (dayInfo.isFullyClosed) {
       throw new ConflictException(dayInfo.closureReason ? `Doctor unavailable: ${dayInfo.closureReason}` : 'Doctor unavailable on this date');
@@ -265,6 +275,36 @@ export class AppointmentsService {
       time: appointment.startTime,
       reason: dto.reason,
     });
+
+    return this.enrich([appointment]).then((r) => r[0]);
+  }
+
+  /**
+   * Patient-initiated cancellation — same effect as staff cancel() but scoped to the
+   * patient's own appointment (never lets one patient cancel another's), doesn't record a
+   * cancelledBy staff user, and only notifies the doctor (the patient is the one acting,
+   * so notifying them of their own cancellation would be pointless).
+   */
+  async cancelByPatient(clinicId: string, patientId: string, id: string, reason?: string) {
+    const appointment = await this.findRaw(clinicId, id);
+    if (appointment.patientId.toString() !== patientId) throw new ForbiddenException('You can only cancel your own appointments.');
+    if (appointment.status === AppointmentStatus.CANCELLED) throw new ConflictException('This appointment is already cancelled.');
+    if (appointment.status === AppointmentStatus.COMPLETED) throw new ConflictException('A completed appointment cannot be cancelled.');
+
+    appointment.status = AppointmentStatus.CANCELLED;
+    appointment.cancelReason = reason;
+    appointment.cancelledAt = new Date();
+    await appointment.save();
+
+    const patient = await this.patientModel.findById(appointment.patientId, { fullName: 1 });
+    const dateStr = appointment.date.toISOString().slice(0, 10);
+    await this.notifyDoctor(
+      clinicId,
+      appointment.doctorId.toString(),
+      NotificationType.APPOINTMENT_CANCELLED,
+      'Appointment cancelled',
+      `${patient?.fullName ?? 'A patient'}'s appointment on ${dateStr} at ${appointment.startTime} was cancelled by the patient${reason ? `: ${reason}` : ''}`,
+    );
 
     return this.enrich([appointment]).then((r) => r[0]);
   }
