@@ -5,6 +5,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PatientPortalAuthService } from './patient-portal-auth.service';
 import { RequestOtpDto } from './dto/request-otp.dto';
+import { RegisterPatientDto } from './dto/register-patient.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { PatientJwtAuthGuard } from './guards/patient-jwt-auth.guard';
@@ -42,6 +43,13 @@ export class PatientPortalController {
   @Post('auth/request-otp')
   requestOtp(@Body() dto: RequestOtpDto) {
     return this.authService.requestOtp(dto.clinicSlug, dto.phone, dto.email);
+  }
+
+  @Public()
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('auth/register')
+  register(@Body() dto: RegisterPatientDto) {
+    return this.authService.register(dto.clinicSlug, dto.fullName, dto.phone, dto.email);
   }
 
   @Public()

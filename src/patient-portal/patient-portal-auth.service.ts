@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -36,6 +36,29 @@ export class PatientPortalAuthService {
     if (!filter) return null;
     const query = this.patientModel.findOne(filter);
     return withOtpFields ? query.select('+otpCodeHash +otpExpiresAt') : query;
+  }
+
+  /**
+   * Self-service account creation: a new patient (not yet known to the clinic) picks their
+   * own name/phone/email. Phone is always required and must be unique per clinic; email, if
+   * given, must be unique too. Unlike requestOtp, this intentionally DOES reveal whether the
+   * phone/email is taken — you can't register into an account you don't already know exists,
+   * so there's no enumeration risk the way there is for login.
+   */
+  async register(clinicSlug: string, fullName: string, phone: string, email?: string): Promise<{ message: string }> {
+    const clinic = await this.clinicsService.findBySlug(clinicSlug);
+
+    const phoneTaken = await this.patientModel.exists({ clinicId: clinic.id, phone, isActive: true });
+    if (phoneTaken) throw new ConflictException('An account with this phone number already exists.');
+
+    if (email) {
+      const emailTaken = await this.patientModel.exists({ clinicId: clinic.id, email: email.toLowerCase(), isActive: true });
+      if (emailTaken) throw new ConflictException('An account with this email already exists.');
+    }
+
+    await this.patientModel.create({ clinicId: clinic.id, fullName, phone, email });
+
+    return this.requestOtp(clinicSlug, phone, undefined);
   }
 
   /** Always responds the same way whether or not the phone/email matches a patient, so the endpoint can't be used to enumerate patients. */
