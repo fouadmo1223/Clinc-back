@@ -13,7 +13,11 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  const corsOrigins = (config.get<string>('corsOrigin') ?? '').split(',').map((o) => o.trim());
+  const corsOriginConfig = config.get<string>('corsOrigin') ?? '';
+  // CORS_ORIGIN=* (or unset) allows any origin — useful before the frontend has a fixed
+  // deployed URL to allowlist yet. Once it does, set CORS_ORIGIN to that exact URL
+  // (comma-separated if there's more than one) to lock this back down.
+  const corsOrigins = corsOriginConfig === '*' || !corsOriginConfig ? true : corsOriginConfig.split(',').map((o) => o.trim());
   app.enableCors({
     origin: config.get<string>('nodeEnv') === 'production' ? corsOrigins : true,
     credentials: true,
