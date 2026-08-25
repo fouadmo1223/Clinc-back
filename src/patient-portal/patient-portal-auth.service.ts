@@ -3,7 +3,6 @@ import { InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
-import * as argon2 from 'argon2';
 import { randomInt } from 'crypto';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { ClinicsService } from '../clinics/clinics.service';
@@ -35,7 +34,7 @@ export class PatientPortalAuthService {
     const filter = phone ? { clinicId, phone, isActive: true } : email ? { clinicId, email: email.toLowerCase(), isActive: true } : null;
     if (!filter) return null;
     const query = this.patientModel.findOne(filter);
-    return withOtpFields ? query.select('+otpCodeHash +otpExpiresAt') : query;
+    return withOtpFields ? query.select('+otpCode +otpExpiresAt') : query;
   }
 
   /**
@@ -73,7 +72,8 @@ export class PatientPortalAuthService {
     if (!patient) return message;
 
     const code = randomInt(100000, 1000000).toString();
-    patient.otpCodeHash = await argon2.hash(code);
+    // TODO: stored in plaintext for now (debugging); hash with argon2 before real patients use this.
+    patient.otpCode = code;
     patient.otpExpiresAt = new Date(Date.now() + OTP_TTL_MS);
     await patient.save();
 
@@ -103,14 +103,13 @@ export class PatientPortalAuthService {
     if (!clinic) throw new UnauthorizedException('Invalid code');
 
     const patient = await this.findPatient(clinic.id, phone, email, true);
-    if (!patient?.otpCodeHash || !patient.otpExpiresAt || patient.otpExpiresAt < new Date()) {
+    if (!patient?.otpCode || !patient.otpExpiresAt || patient.otpExpiresAt < new Date()) {
       throw new UnauthorizedException('Invalid or expired code');
     }
 
-    const valid = await argon2.verify(patient.otpCodeHash, code);
-    if (!valid) throw new UnauthorizedException('Invalid or expired code');
+    if (patient.otpCode !== code) throw new UnauthorizedException('Invalid or expired code');
 
-    patient.otpCodeHash = undefined;
+    patient.otpCode = undefined;
     patient.otpExpiresAt = undefined;
     await patient.save();
 

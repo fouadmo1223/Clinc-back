@@ -15,6 +15,7 @@ export class MailService {
   constructor(private config: ConfigService) {
     const host = config.get<string>('smtp.host');
     if (host) {
+      const isProduction = config.get<string>('nodeEnv') === 'production';
       this.transporter = nodemailer.createTransport({
         host,
         port: config.get<number>('smtp.port'),
@@ -23,6 +24,12 @@ export class MailService {
           user: config.get<string>('smtp.user'),
           pass: config.get<string>('smtp.password'),
         },
+        // Some local dev machines run antivirus/proxy software that intercepts outbound TLS
+        // and presents its own certificate, which Node correctly rejects by default
+        // ("self-signed certificate in certificate chain"). That's a local network quirk, not
+        // a real MITM risk worth blocking on for local testing — but it must never be relaxed
+        // in production, where a real MITM risk is exactly what cert validation protects against.
+        ...(isProduction ? {} : { tls: { rejectUnauthorized: false } }),
       });
     }
   }

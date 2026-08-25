@@ -55,8 +55,9 @@ export class Patient {
   isActive: boolean;
 
   // Patient-portal OTP login — never returned by default queries.
+  // TODO: stored in plaintext for now (debugging); hash with argon2 before real patients use this.
   @Prop({ select: false })
-  otpCodeHash?: string;
+  otpCode?: string;
 
   @Prop({ select: false })
   otpExpiresAt?: Date;

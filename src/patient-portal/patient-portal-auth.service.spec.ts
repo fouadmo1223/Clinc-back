@@ -1,5 +1,4 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import * as argon2 from 'argon2';
 import { PatientPortalAuthService } from './patient-portal-auth.service';
 
 const CLINIC = { id: 'clinic-1', name: 'Demo Clinic' };
@@ -101,7 +100,7 @@ describe('PatientPortalAuthService', () => {
     it('rejects an expired code', async () => {
       patientModel.findOne.mockReturnValue({
         select: jest.fn().mockResolvedValue({
-          otpCodeHash: await argon2.hash('123456'),
+          otpCode: '123456',
           otpExpiresAt: new Date(Date.now() - 1000),
         }),
       });
@@ -114,7 +113,7 @@ describe('PatientPortalAuthService', () => {
     it('rejects a wrong code', async () => {
       patientModel.findOne.mockReturnValue({
         select: jest.fn().mockResolvedValue({
-          otpCodeHash: await argon2.hash('123456'),
+          otpCode: '123456',
           otpExpiresAt: new Date(Date.now() + 60000),
         }),
       });
@@ -128,7 +127,7 @@ describe('PatientPortalAuthService', () => {
       const patientDoc = {
         id: 'patient-1',
         fullName: 'Test Patient',
-        otpCodeHash: await argon2.hash('123456'),
+        otpCode: '123456',
         otpExpiresAt: new Date(Date.now() + 60000),
         save: jest.fn().mockResolvedValue(undefined),
       };
@@ -136,7 +135,7 @@ describe('PatientPortalAuthService', () => {
 
       const result = await service.verifyOtp('demo-clinic', '01000000001', undefined, '123456');
 
-      expect(patientDoc.otpCodeHash).toBeUndefined();
+      expect(patientDoc.otpCode).toBeUndefined();
       expect(jwtService.sign).toHaveBeenCalledWith(
         expect.objectContaining({ sub: 'patient-1', clinicId: 'clinic-1' }),
         expect.anything(),
