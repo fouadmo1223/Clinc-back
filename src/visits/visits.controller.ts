@@ -25,13 +25,13 @@ export class VisitsController {
   @Get()
   @RequirePermissions(Permission.VISITS_READ)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryVisitsDto) {
-    return this.visitsService.findAll(requireClinicId(user), query);
+    return this.visitsService.findAll(requireClinicId(user), user, query);
   }
 
   @Get(':id')
   @RequirePermissions(Permission.VISITS_READ)
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.visitsService.findOne(requireClinicId(user), id);
+    return this.visitsService.findOne(requireClinicId(user), user, id);
   }
 
   @Patch(':id')

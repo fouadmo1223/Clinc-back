@@ -25,13 +25,13 @@ export class InvoicesController {
   @Get()
   @RequirePermissions(Permission.INVOICES_READ)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryInvoicesDto) {
-    return this.invoicesService.findAll(requireClinicId(user), query);
+    return this.invoicesService.findAll(requireClinicId(user), user, query);
   }
 
   @Get(':id')
   @RequirePermissions(Permission.INVOICES_READ)
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.invoicesService.findOne(requireClinicId(user), id);
+    return this.invoicesService.findOne(requireClinicId(user), user, id);
   }
 
   @Get(':id/pdf')
@@ -42,7 +42,7 @@ export class InvoicesController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clinicId = requireClinicId(user);
-    const pdf = await this.invoicesService.generatePdf(clinicId, id);
+    const pdf = await this.invoicesService.generatePdf(clinicId, user, id);
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="invoice-${id}.pdf"`,
@@ -58,7 +58,7 @@ export class InvoicesController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clinicId = requireClinicId(user);
-    const csv = await this.invoicesService.generateCsv(clinicId, id);
+    const csv = await this.invoicesService.generateCsv(clinicId, user, id);
     res.set({
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="invoice-${id}.csv"`,
@@ -74,7 +74,7 @@ export class InvoicesController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clinicId = requireClinicId(user);
-    const xlsx = await this.invoicesService.generateXlsx(clinicId, id);
+    const xlsx = await this.invoicesService.generateXlsx(clinicId, user, id);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="invoice-${id}.xlsx"`,

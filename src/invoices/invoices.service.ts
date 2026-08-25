@@ -6,6 +6,7 @@ import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { scopeToBranch, assertBranchAccess } from '../common/utils/branch-scope';
 import { PdfService } from '../pdf/pdf.service';
 import { buildInvoiceHtml } from '../pdf/templates';
 import { ExportService, ExportColumn } from '../pdf/export.service';
@@ -36,6 +37,7 @@ export class InvoicesService {
   }
 
   async create(clinicId: string, user: AuthenticatedUser, dto: CreateInvoiceDto) {
+    assertBranchAccess(user, dto.branchId);
     const patient = await this.patientModel.findById(dto.patientId);
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');
 
@@ -65,13 +67,14 @@ export class InvoicesService {
     return this.enrich([invoice]).then((r) => r[0]);
   }
 
-  async findAll(clinicId: string, query: QueryInvoicesDto) {
+  async findAll(clinicId: string, user: AuthenticatedUser, query: QueryInvoicesDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
     const filter: FilterQuery<InvoiceDocument> = { clinicId };
     if (query.patientId) filter.patientId = query.patientId;
-    if (query.branchId) filter.branchId = query.branchId;
+    const branchScope = scopeToBranch(user, query.branchId);
+    if (branchScope !== undefined) filter.branchId = branchScope;
     if (query.status) filter.status = query.status;
 
     const [items, total] = await Promise.all([
@@ -92,13 +95,14 @@ export class InvoicesService {
     };
   }
 
-  async findOne(clinicId: string, id: string) {
+  async findOne(clinicId: string, user: AuthenticatedUser, id: string) {
     const invoice = await this.findRaw(clinicId, id);
+    assertBranchAccess(user, invoice.branchId.toString());
     return this.enrich([invoice]).then((r) => r[0]);
   }
 
-  async generatePdf(clinicId: string, id: string): Promise<Buffer> {
-    const invoice = await this.findOne(clinicId, id);
+  async generatePdf(clinicId: string, user: AuthenticatedUser, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, user, id);
     const clinic = await this.clinicsService.findById(clinicId);
 
     const html = buildInvoiceHtml(
@@ -150,13 +154,13 @@ export class InvoicesService {
     return rows;
   }
 
-  async generateCsv(clinicId: string, id: string): Promise<Buffer> {
-    const invoice = await this.findOne(clinicId, id);
+  async generateCsv(clinicId: string, user: AuthenticatedUser, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, user, id);
     return this.exportService.buildCsv(INVOICE_EXPORT_COLUMNS, this.buildExportRows(invoice));
   }
 
-  async generateXlsx(clinicId: string, id: string): Promise<Buffer> {
-    const invoice = await this.findOne(clinicId, id);
+  async generateXlsx(clinicId: string, user: AuthenticatedUser, id: string): Promise<Buffer> {
+    const invoice = await this.findOne(clinicId, user, id);
     return this.exportService.buildXlsx('Invoice', INVOICE_EXPORT_COLUMNS, this.buildExportRows(invoice));
   }
 

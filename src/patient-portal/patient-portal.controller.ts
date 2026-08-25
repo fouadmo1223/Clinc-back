@@ -90,7 +90,7 @@ export class PatientPortalController {
   @UseGuards(PatientJwtAuthGuard)
   @Get('appointments')
   async appointments(@CurrentPatient() patient: AuthenticatedPatient) {
-    return this.appointmentsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
+    return this.appointmentsService.findAll(patient.clinicId, { branchIds: [] }, { patientId: patient.patientId, limit: 100 });
   }
 
   @Public()
@@ -142,7 +142,7 @@ export class PatientPortalController {
   @UseGuards(PatientJwtAuthGuard)
   @Get('visits')
   async visits(@CurrentPatient() patient: AuthenticatedPatient) {
-    return this.visitsService.findAll(patient.clinicId, { patientId: patient.patientId, limit: 100 });
+    return this.visitsService.findAll(patient.clinicId, { branchIds: [] }, { patientId: patient.patientId, limit: 100 });
   }
 
   @Public()

@@ -26,13 +26,13 @@ export class AppointmentsController {
   @Get()
   @RequirePermissions(Permission.APPOINTMENTS_READ)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryAppointmentsDto) {
-    return this.appointmentsService.findAll(requireClinicId(user), query);
+    return this.appointmentsService.findAll(requireClinicId(user), user, query);
   }
 
   @Get(':id')
   @RequirePermissions(Permission.APPOINTMENTS_READ)
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.appointmentsService.findOne(requireClinicId(user), id);
+    return this.appointmentsService.findOne(requireClinicId(user), user, id);
   }
 
   @Patch(':id')

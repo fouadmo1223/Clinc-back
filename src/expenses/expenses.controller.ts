@@ -24,7 +24,7 @@ export class ExpensesController {
   @Get()
   @RequirePermissions(Permission.EXPENSES_READ)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryExpensesDto) {
-    return this.expensesService.findAll(requireClinicId(user), query);
+    return this.expensesService.findAll(requireClinicId(user), user, query);
   }
 
   @Delete(':id')

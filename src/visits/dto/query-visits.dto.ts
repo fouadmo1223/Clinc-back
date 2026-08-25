@@ -11,6 +11,10 @@ export class QueryVisitsDto {
   doctorId?: string;
 
   @IsOptional()
+  @IsMongoId()
+  branchId?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 

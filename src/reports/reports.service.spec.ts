@@ -10,6 +10,8 @@ describe('ReportsService', () => {
 
   const clinicId = '0'.repeat(23) + '1';
   const branchId = '0'.repeat(23) + '2';
+  const otherBranchId = '0'.repeat(23) + '3';
+  const unrestrictedUser = { branchIds: [] } as never;
 
   beforeEach(() => {
     paymentModel = {
@@ -30,7 +32,7 @@ describe('ReportsService', () => {
   });
 
   it('computes totals and revenueByDay from the payment aggregation facet', async () => {
-    const result = await service.getSummary(clinicId, { from: '2026-01-01', to: '2026-12-31' } as never);
+    const result = await service.getSummary(clinicId, unrestrictedUser, { from: '2026-01-01', to: '2026-12-31' } as never);
 
     expect(result.totalRevenue).toBe(750);
     expect(result.totalExpenses).toBe(9370);
@@ -39,14 +41,14 @@ describe('ReportsService', () => {
   });
 
   it('does not add a branch $lookup stage to the payment pipeline when no branchId is given', async () => {
-    await service.getSummary(clinicId, { from: '2026-01-01', to: '2026-12-31' } as never);
+    await service.getSummary(clinicId, unrestrictedUser, { from: '2026-01-01', to: '2026-12-31' } as never);
 
     const pipeline = paymentModel.aggregate.mock.calls[0][0];
     expect(pipeline.some((stage: Record<string, unknown>) => '$lookup' in stage)).toBe(false);
   });
 
   it('joins to invoices to filter payments by branch, since Payment has no branchId of its own', async () => {
-    await service.getSummary(clinicId, { from: '2026-01-01', to: '2026-12-31', branchId } as never);
+    await service.getSummary(clinicId, unrestrictedUser, { from: '2026-01-01', to: '2026-12-31', branchId } as never);
 
     const pipeline = paymentModel.aggregate.mock.calls[0][0];
     const lookupStage = pipeline.find((stage: Record<string, unknown>) => '$lookup' in stage) as
@@ -65,9 +67,33 @@ describe('ReportsService', () => {
   it('returns zeroed totals when the payment facet has no matching rows', async () => {
     paymentModel.aggregate.mockResolvedValue([{ total: [], byDay: [] }]);
 
-    const result = await service.getSummary(clinicId, { from: '2026-01-01', to: '2026-12-31' } as never);
+    const result = await service.getSummary(clinicId, unrestrictedUser, { from: '2026-01-01', to: '2026-12-31' } as never);
 
     expect(result.totalRevenue).toBe(0);
     expect(result.revenueByDay).toEqual([]);
+  });
+
+  it('scopes a branch-restricted user to their own branch even with no branchId query param', async () => {
+    const scopedUser = { branchIds: [branchId] } as never;
+
+    await service.getSummary(clinicId, scopedUser, { from: '2026-01-01', to: '2026-12-31' } as never);
+
+    const pipeline = paymentModel.aggregate.mock.calls[0][0];
+    const lookupStage = pipeline.some((stage: Record<string, unknown>) => '$lookup' in stage);
+    expect(lookupStage).toBe(true);
+
+    const [expenseMatch] = expenseModel.aggregate.mock.calls[0][0];
+    expect((expenseMatch.$match as Record<string, unknown>).branchId).toEqual(expect.anything());
+  });
+
+  it('never lets a branch-restricted user pull another branch\'s data via the branchId query param', async () => {
+    const scopedUser = { branchIds: [branchId] } as never;
+
+    await service.getSummary(clinicId, scopedUser, { from: '2026-01-01', to: '2026-12-31', branchId: otherBranchId } as never);
+
+    const [expenseMatch] = expenseModel.aggregate.mock.calls[0][0];
+    const matchedBranchId = (expenseMatch.$match as Record<string, { $in: unknown[] }>).branchId;
+    // scopeToBranch returns an impossible {$in: []} when the requested branch isn't theirs.
+    expect(matchedBranchId.$in).toEqual([]);
   });
 });

@@ -7,6 +7,8 @@ import { Appointment, AppointmentDocument, AppointmentStatus } from '../appointm
 import { Visit, VisitDocument } from '../visits/schemas/visit.schema';
 import { Patient, PatientDocument } from '../patients/schemas/patient.schema';
 import { QuerySummaryDto } from './dto/query-summary.dto';
+import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { scopeToBranch } from '../common/utils/branch-scope';
 
 function startOfUtcDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -31,7 +33,7 @@ export class ReportsService {
     @InjectModel(Patient.name) private patientModel: Model<PatientDocument>,
   ) {}
 
-  async getSummary(clinicId: string, query: QuerySummaryDto) {
+  async getSummary(clinicId: string, user: AuthenticatedUser, query: QuerySummaryDto) {
     const to = query.to ? new Date(query.to) : new Date();
     const from = query.from ? new Date(query.from) : new Date(to.getTime() - 29 * 24 * 60 * 60 * 1000);
     const fromDay = startOfUtcDay(from);
@@ -41,7 +43,17 @@ export class ReportsService {
     // later that same day, so widen the upper bound to the end of the day.
     const toInclusive = new Date(toDay.getTime() + 24 * 60 * 60 * 1000 - 1);
     const clinicObjectId = new Types.ObjectId(clinicId);
-    const branchObjectId = query.branchId ? new Types.ObjectId(query.branchId) : undefined;
+
+    // A branch-scoped staff member's reports must never include another branch's revenue —
+    // resolve their effective branch scope the same way the list endpoints do, then cast to
+    // ObjectId(s) since aggregation pipelines skip Mongoose's automatic string casting.
+    const branchScope = scopeToBranch(user, query.branchId);
+    const branchObjectId =
+      typeof branchScope === 'string'
+        ? new Types.ObjectId(branchScope)
+        : branchScope
+          ? { $in: branchScope.$in.map((id) => new Types.ObjectId(id)) }
+          : undefined;
 
     const branchFilter = branchObjectId ? { branchId: branchObjectId } : {};
 

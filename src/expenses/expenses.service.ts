@@ -5,12 +5,14 @@ import { Expense, ExpenseDocument } from './schemas/expense.schema';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import { QueryExpensesDto } from './dto/query-expenses.dto';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { scopeToBranch, assertBranchAccess } from '../common/utils/branch-scope';
 
 @Injectable()
 export class ExpensesService {
   constructor(@InjectModel(Expense.name) private expenseModel: Model<ExpenseDocument>) {}
 
   async create(clinicId: string, user: AuthenticatedUser, dto: CreateExpenseDto) {
+    assertBranchAccess(user, dto.branchId);
     return this.expenseModel.create({
       clinicId: new Types.ObjectId(clinicId),
       branchId: new Types.ObjectId(dto.branchId),
@@ -22,12 +24,13 @@ export class ExpensesService {
     });
   }
 
-  async findAll(clinicId: string, query: QueryExpensesDto) {
+  async findAll(clinicId: string, user: AuthenticatedUser, query: QueryExpensesDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
 
     const filter: FilterQuery<ExpenseDocument> = { clinicId };
-    if (query.branchId) filter.branchId = query.branchId;
+    const branchScope = scopeToBranch(user, query.branchId);
+    if (branchScope !== undefined) filter.branchId = branchScope;
     if (query.from || query.to) {
       const range: Record<string, Date> = {};
       if (query.from) range.$gte = new Date(query.from);
@@ -42,7 +45,8 @@ export class ExpensesService {
     // does, so clinicId/branchId need to be cast explicitly here or $match silently matches
     // nothing.
     const aggregateMatch: Record<string, unknown> = { ...filter, clinicId: new Types.ObjectId(clinicId) };
-    if (query.branchId) aggregateMatch.branchId = new Types.ObjectId(query.branchId);
+    if (typeof branchScope === 'string') aggregateMatch.branchId = new Types.ObjectId(branchScope);
+    else if (branchScope) aggregateMatch.branchId = { $in: branchScope.$in.map((id) => new Types.ObjectId(id)) };
 
     const [items, total, totalAmountResult] = await Promise.all([
       this.expenseModel

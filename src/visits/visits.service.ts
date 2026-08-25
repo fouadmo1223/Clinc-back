@@ -10,6 +10,7 @@ import { DoctorsService } from '../doctors/doctors.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { AppointmentStatus } from '../appointments/schemas/appointment.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
+import { scopeToBranch, assertBranchAccess, BranchScoped } from '../common/utils/branch-scope';
 
 function startOfUtcDay(date: Date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -61,13 +62,15 @@ export class VisitsService {
     return this.enrich([visit]).then((r) => r[0]);
   }
 
-  async findAll(clinicId: string, query: QueryVisitsDto) {
+  async findAll(clinicId: string, user: BranchScoped, query: QueryVisitsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
     const filter: FilterQuery<VisitDocument> = { clinicId };
     if (query.patientId) filter.patientId = query.patientId;
     if (query.doctorId) filter.doctorId = query.doctorId;
+    const branchScope = scopeToBranch(user, query.branchId);
+    if (branchScope !== undefined) filter.branchId = branchScope;
     if (query.from || query.to) {
       const range: Record<string, Date> = {};
       if (query.from) range.$gte = startOfUtcDay(new Date(query.from));
@@ -93,8 +96,9 @@ export class VisitsService {
     };
   }
 
-  async findOne(clinicId: string, id: string) {
+  async findOne(clinicId: string, user: BranchScoped, id: string) {
     const visit = await this.findRaw(clinicId, id);
+    assertBranchAccess(user, visit.branchId.toString());
     return this.enrich([visit]).then((r) => r[0]);
   }
 

@@ -14,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { QueueGateway } from './queue.gateway';
+import { scopeToBranch, assertBranchAccess } from '../common/utils/branch-scope';
 
 function startOfUtcDay(date: Date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -33,6 +34,7 @@ export class QueueService {
   ) {}
 
   async checkIn(clinicId: string, user: AuthenticatedUser, dto: CheckInDto) {
+    assertBranchAccess(user, dto.branchId);
     const patient = await this.patientModel.findById(dto.patientId);
     if (!patient || patient.clinicId.toString() !== clinicId) throw new NotFoundException('Patient not found');
     if (dto.doctorId) {
@@ -102,9 +104,10 @@ export class QueueService {
     return enriched;
   }
 
-  async findAll(clinicId: string, query: QueryQueueDto) {
+  async findAll(clinicId: string, user: AuthenticatedUser, query: QueryQueueDto) {
     const filter: FilterQuery<QueueEntryDocument> = { clinicId, date: startOfUtcDay(query.date ? new Date(query.date) : new Date()) };
-    if (query.branchId) filter.branchId = query.branchId;
+    const branchScope = scopeToBranch(user, query.branchId);
+    if (branchScope !== undefined) filter.branchId = branchScope;
 
     const entries = await this.queueModel.find(filter);
     const enriched = await this.enrich(entries);

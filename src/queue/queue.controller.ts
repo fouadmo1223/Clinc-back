@@ -25,7 +25,7 @@ export class QueueController {
   @Get()
   @RequirePermissions(Permission.QUEUE_MANAGE)
   findAll(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryQueueDto) {
-    return this.queueService.findAll(requireClinicId(user), query);
+    return this.queueService.findAll(requireClinicId(user), user, query);
   }
 
   @Patch(':id')

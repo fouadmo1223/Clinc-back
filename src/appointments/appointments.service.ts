@@ -13,6 +13,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/schemas/notification.schema';
 import { AuthenticatedUser } from '../common/types/authenticated-user.interface';
 import { parseTime, formatTime, rangesOverlap, TimeRange } from '../common/utils/time.util';
+import { scopeToBranch, assertBranchAccess, BranchScoped } from '../common/utils/branch-scope';
 
 function startOfUtcDay(dateStr: string): Date {
   const d = new Date(dateStr);
@@ -175,7 +176,7 @@ export class AppointmentsService {
     return this.enrich([appointment]).then((r) => r[0]);
   }
 
-  async findAll(clinicId: string, query: QueryAppointmentsDto) {
+  async findAll(clinicId: string, user: BranchScoped, query: QueryAppointmentsDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
 
@@ -188,7 +189,8 @@ export class AppointmentsService {
       filter.date = range;
     }
     if (query.doctorId) filter.doctorId = query.doctorId;
-    if (query.branchId) filter.branchId = query.branchId;
+    const branchScope = scopeToBranch(user, query.branchId);
+    if (branchScope !== undefined) filter.branchId = branchScope;
     if (query.patientId) filter.patientId = query.patientId;
     if (query.status) filter.status = query.status;
 
@@ -210,8 +212,9 @@ export class AppointmentsService {
     };
   }
 
-  async findOne(clinicId: string, id: string) {
+  async findOne(clinicId: string, user: BranchScoped, id: string) {
     const appointment = await this.findRaw(clinicId, id);
+    assertBranchAccess(user, appointment.branchId.toString());
     return this.enrich([appointment]).then((r) => r[0]);
   }
 

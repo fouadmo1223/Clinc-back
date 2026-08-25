@@ -17,6 +17,6 @@ export class ReportsController {
   @Get('summary')
   @RequirePermissions(Permission.REPORTS_READ)
   getSummary(@CurrentUser() user: AuthenticatedUser, @Query() query: QuerySummaryDto) {
-    return this.reportsService.getSummary(requireClinicId(user), query);
+    return this.reportsService.getSummary(requireClinicId(user), user, query);
   }
 }
