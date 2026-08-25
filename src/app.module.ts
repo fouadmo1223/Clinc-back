@@ -34,6 +34,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PatientPortalModule } from './patient-portal/patient-portal.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { PublicModule } from './public/public.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { PublicModule } from './public/public.module';
     PatientPortalModule,
     ReviewsModule,
     PublicModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
